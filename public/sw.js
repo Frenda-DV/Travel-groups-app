@@ -4,7 +4,7 @@
 // geserveerd terwijl op de achtergrond een verse versie wordt opgehaald.
 // Reisgegevens lopen hier NIET doorheen: die bewaart de app zelf in IndexedDB,
 // zodat ze bij uitloggen of ingetrokken toegang gericht gewist kunnen worden.
-const VERSIE = 'v2';
+const VERSIE = 'v3';
 const OPSLAG = `mee-op-reis-${VERSIE}`;
 const APP_BESTANDEN = [
   '/index.html',

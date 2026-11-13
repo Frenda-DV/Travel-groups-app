@@ -1,0 +1,3 @@
+De sfeerbeelden in deze map zijn op 13 november 2026 gegenereerd met de
+beeldgenerator van ElevenLabs (model gpt-image-2.5-sunburst), in opdracht van
+Reisspecialist De Valk. Het zijn geen foto's van bestaande plaatsen.
