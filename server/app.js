@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { nieuwToken, hash, nieuweCode, codeHash, maakLimiet } from './beveiliging.js';
 import { uitnodigingsMail, inlogMail } from './mail.js';
+import { metHerkansing } from './db.js';
 
 const publiekeMap = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const SESSIE_DAGEN = 180;
@@ -70,8 +71,8 @@ async function invoer(c) {
 
 // basisUrl: publiek adres voor links in mails. Leeg laten mag: dan geldt het
 //   adres waarop de aanvraag binnenkwam.
-// gereed: een belofte die eerst moet slagen (de controle op de databaserol)
-//   voordat er ook maar één aanvraag bij de database komt.
+// gereed: een functie die een belofte geeft; die moet slagen (de controle op
+//   de databaserol) voordat er ook maar één aanvraag bij de database komt.
 export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veilig = basisUrl.startsWith('https://'), gereed = null }) {
   const app = new Hono();
   const adresVan = (c) => basisUrl || new URL(c.req.url).origin;
@@ -119,9 +120,9 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
   // Bij een fout komt alleen een korte code naar buiten; de details staan in de serverlog.
   app.get('/api/gezondheid', async (c) => {
     try {
-      if (gereed) await gereed;
-      await pool.query('select 1');
-      return c.json({ ok: true, database: 'ok' });
+      if (gereed) await gereed();
+      await metHerkansing(() => pool.query('select 1'));
+      return c.json({ ok: true, database: 'ok', mail: mail.actief ? 'ingesteld' : 'niet ingesteld' });
     } catch (fout) {
       console.error('Database niet bereikbaar:', fout);
       const code = fout.code || (/Geen database/.test(fout.message) ? 'niet-ingesteld' : 'onbekend');
@@ -139,8 +140,8 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
         return c.json({ fout: 'Aanvraag vanaf een andere website geweigerd.' }, 403);
       }
     }
-    if (gereed) await gereed;
-    const db = await pool.connect();
+    if (gereed) await gereed();
+    const db = await metHerkansing(() => pool.connect());
     try {
       await db.query('begin');
       const token = getCookie(c, COOKIE);

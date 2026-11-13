@@ -8,8 +8,12 @@
 // mag de app niet draaien (row-level security geldt niet voor de eigenaar).
 // Daarom wordt in dat adres de rol vervangen door reisapp_app met het
 // wachtwoord uit APP_DB_PASSWORD.
+// De databasedriver controleert het certificaat bij sslmode=require al volledig.
+// Door dat uit te schrijven verdwijnt een waarschuwing bij elke start.
+const metStrikteTls = (adres) => adres.replace(/([?&]sslmode=)require\b/, '$1verify-full');
+
 export function databaseUrls(env = process.env) {
-  const admin = env.DATABASE_ADMIN_URL || env.DATABASE_URL_UNPOOLED || env.POSTGRES_URL_NON_POOLING || '';
+  const admin = metStrikteTls(env.DATABASE_ADMIN_URL || env.DATABASE_URL_UNPOOLED || env.POSTGRES_URL_NON_POOLING || '');
   let app = env.APP_DATABASE_URL || '';
   if (!app && env.DATABASE_URL) {
     const url = new URL(env.DATABASE_URL);
@@ -19,7 +23,7 @@ export function databaseUrls(env = process.env) {
     }
     app = url.toString();
   }
-  return { admin, app };
+  return { admin, app: metStrikteTls(app) };
 }
 
 // Publiek adres voor links in mails. Leeg betekent: gebruik het adres waarop

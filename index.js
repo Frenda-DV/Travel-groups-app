@@ -2,7 +2,7 @@
 // dat de app als standaard-export aanbiedt, en serveert de map public/ zelf.
 // Lokaal en op een gewone server start je de app met `npm start` (server/index.js).
 import { Hono } from 'hono';
-import { maakPool, controleerAppRol } from './server/db.js';
+import { maakPool, maakRolcontrole } from './server/db.js';
 import { maakMail } from './server/mail.js';
 import { maakApp } from './server/app.js';
 import { databaseUrls, publiekAdres } from './server/omgeving.js';
@@ -12,12 +12,11 @@ const { app: databaseUrl } = databaseUrls();
 const pool = databaseUrl ? maakPool(databaseUrl, { max: 3, idleTimeoutMillis: 5000 }) : null;
 
 // De controle op de databaserol moet slagen voordat er iets bij de database
-// komt. Mislukt hij, dan geeft elke API-aanvraag een fout en staat de reden in
-// de log; de app blijft dus dicht in plaats van onveilig open.
+// komt. Zolang hij mislukt geeft elke API-aanvraag een fout en staat de reden
+// in de log; de app blijft dus dicht in plaats van onveilig open.
 const gereed = pool
-  ? controleerAppRol(pool)
-  : Promise.reject(new Error('Geen database ingesteld. Koppel een Postgres-database aan het project en zet APP_DB_PASSWORD.'));
-gereed.catch((fout) => console.error(fout.message));
+  ? maakRolcontrole(pool)
+  : () => Promise.reject(new Error('Geen database ingesteld. Koppel een Postgres-database aan het project en zet APP_DB_PASSWORD.'));
 
 const app = maakApp({
   pool,
