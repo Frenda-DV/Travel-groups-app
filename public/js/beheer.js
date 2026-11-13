@@ -4,7 +4,7 @@
 import { html, useEffect, useState } from './vendor/preact-htm.js';
 import { api, GeenVerbinding } from './api.js';
 import { datumLang } from './hulp.js';
-import { Melding, Veld, Venster, Vinkje, useActie } from './onderdelen.js';
+import { Melding, Sfeerbeeld, Veld, Venster, Vinkje, useActie } from './onderdelen.js';
 
 function Knoppen({ bezig, onVerwijder, verwijderLabel = 'Verwijder', bewaarLabel = 'Bewaar' }) {
   return html`
@@ -143,8 +143,10 @@ export function BerichtFormulier({ reis, onKlaar }) {
     </form>`;
 }
 
+const OMSLAGEN = [['zee', 'Op zee'], ['fjorden', 'Fjorden'], ['rivier', 'Rivier'], ['stad', 'Stad'], ['landschap', 'Landschap']];
+
 export function ReisVenster({ orgId, reis, onKlaar, onSluit }) {
-  const [v, setV] = useState(() => ({ titel: '', ondertitel: '', start_datum: '', eind_datum: '', gearchiveerd: false, ...(reis || {}) }));
+  const [v, setV] = useState(() => ({ titel: '', ondertitel: '', start_datum: '', eind_datum: '', gearchiveerd: false, omslag: 'zee', ...(reis || {}) }));
   const zet = (veld) => (waarde) => setV((oud) => ({ ...oud, [veld]: waarde }));
   const { bezig, fout, voerUit } = useActie();
 
@@ -162,6 +164,16 @@ export function ReisVenster({ orgId, reis, onKlaar, onSluit }) {
           <${Veld} label="Eerste dag" soort="date" waarde=${v.start_datum} zet=${zet('start_datum')} verplicht />
           <${Veld} label="Laatste dag" soort="date" waarde=${v.eind_datum} zet=${zet('eind_datum')} verplicht />
         </div>
+        <fieldset class="keuze">
+          <legend>Sfeerbeeld</legend>
+          <div class="beeldkeuze">
+            ${OMSLAGEN.map(([sleutel, naam]) => html`
+              <label>
+                <input type="radio" name="omslag" checked=${v.omslag === sleutel} onChange=${() => zet('omslag')(sleutel)} />
+                <span class="beeldvlak"><${Sfeerbeeld} naam=${sleutel} lui /><span>${naam}</span></span>
+              </label>`)}
+          </div>
+        </fieldset>
         ${!reis && html`<p class="uitleg">Voor elke dag van de reis wordt alvast een lege dag in het programma gezet.</p>`}
         ${reis && html`<${Vinkje} label="Reis afsluiten: deelnemers en groepsleiders kunnen de reis niet meer openen" waarde=${v.gearchiveerd} zet=${zet('gearchiveerd')} />`}
         <${Melding}>${fout}<//>

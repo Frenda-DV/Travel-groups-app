@@ -9,6 +9,7 @@ import { uitnodigingsMail, inlogMail } from './mail.js';
 const publiekeMap = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const SESSIE_DAGEN = 180;
 const KWARTIER = 15 * 60 * 1000;
+const OMSLAGEN = ['zee', 'fjorden', 'rivier', 'stad', 'landschap'];
 
 class Fout extends Error {
   constructor(status, melding) {
@@ -156,7 +157,7 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
 
   async function haalReis(db, reisId) {
     const { rows } = await db.query(
-      `select r.id, r.org_id, r.titel, r.ondertitel, r.start_datum, r.eind_datum, r.gearchiveerd,
+      `select r.id, r.org_id, r.titel, r.ondertitel, r.start_datum, r.eind_datum, r.gearchiveerd, r.omslag,
               o.naam as organisatie, reis_rol(r.id) as rol, is_beheerder(r.org_id) as beheerder,
               mag_reis_beheren(r.id, r.org_id) as mag_beheren
        from reizen r join organisaties o on o.id = r.org_id
@@ -251,7 +252,7 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
     const leden = await db.query('select m.naam, m.email, m.rol, m.org_id, m.reis_id from mijn_leden() m order by m.naam');
     const organisaties = await db.query('select o.id, o.naam, is_beheerder(o.id) as beheerder from organisaties o order by o.naam');
     const reizen = await db.query(
-      `select r.id, r.org_id, r.titel, r.ondertitel, r.start_datum, r.eind_datum, r.gearchiveerd,
+      `select r.id, r.org_id, r.titel, r.ondertitel, r.start_datum, r.eind_datum, r.gearchiveerd, r.omslag,
               reis_rol(r.id) as rol, mag_reis_beheren(r.id, r.org_id) as mag_beheren
        from reizen r order by r.start_datum, r.titel`);
     return c.json({
@@ -272,6 +273,7 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
     return {
       titel: tekst(data.titel, 'De naam van de reis', { max: 120, verplicht: true }),
       ondertitel: tekst(data.ondertitel, 'De ondertitel', { max: 200 }),
+      omslag: OMSLAGEN.includes(data.omslag) ? data.omslag : 'zee',
       start, eind,
     };
   }
@@ -288,8 +290,8 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
     if (!mag[0].lid) throw new Fout(404, 'Niet gevonden.');
     if (!mag[0].beheerder) throw new Fout(403, 'Alleen een beheerder kan een reis aanmaken.');
     const { rows } = await db.query(
-      `insert into reizen (org_id, titel, ondertitel, start_datum, eind_datum) values ($1, $2, $3, $4, $5) returning id`,
-      [orgId, r.titel, r.ondertitel, r.start, r.eind]);
+      `insert into reizen (org_id, titel, ondertitel, start_datum, eind_datum, omslag) values ($1, $2, $3, $4, $5, $6) returning id`,
+      [orgId, r.titel, r.ondertitel, r.start, r.eind, r.omslag]);
     await vulDagen(db, orgId, rows[0].id, r.start, r.eind);
     return c.json({ id: rows[0].id }, 201);
   });
@@ -301,8 +303,8 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
     const data = await invoer(c);
     const r = reisInvoer(data);
     await db.query(
-      `update reizen set titel = $2, ondertitel = $3, start_datum = $4, eind_datum = $5, gearchiveerd = $6 where id = $1`,
-      [reis.id, r.titel, r.ondertitel, r.start, r.eind, bool(data.gearchiveerd)]);
+      `update reizen set titel = $2, ondertitel = $3, start_datum = $4, eind_datum = $5, gearchiveerd = $6, omslag = $7 where id = $1`,
+      [reis.id, r.titel, r.ondertitel, r.start, r.eind, bool(data.gearchiveerd), r.omslag]);
     await vulDagen(db, reis.org_id, reis.id, r.start, r.eind);
     return c.json({ ok: true });
   });
@@ -591,7 +593,7 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
 
   const TYPES = {
     '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-    '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon',
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon',
   };
   app.get('*', (c) => {
     let pad = decodeURIComponent(new URL(c.req.url).pathname);

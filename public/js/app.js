@@ -3,7 +3,7 @@ import { html, render, useCallback, useEffect, useState } from './vendor/preact-
 import { api, GeenVerbinding } from './api.js';
 import { lees, bewaar, sleutels, verwijder, wisAlles } from './opslag.js';
 import { periode } from './hulp.js';
-import { Melding, Veld, useActie } from './onderdelen.js';
+import { Melding, Sfeerbeeld, Veld, useActie } from './onderdelen.js';
 import { ReisScherm } from './reis.js';
 import { ReisVenster } from './beheer.js';
 
@@ -89,7 +89,16 @@ function App() {
 }
 
 function Merk() {
-  return html`<p class="merk"><img src="/icons/icon-192.png" alt="" width="40" height="40" /> Mee op Reis</p>`;
+  return html`<p class="merk"><img src="/icons/icon-192.png" alt="" width="38" height="38" /> Mee op Reis</p>`;
+}
+
+// Entree: sfeerbeeld bovenaan, de inhoud op een kaart die eroverheen schuift.
+function Entree({ omslag, children }) {
+  return html`
+    <div class="entree">
+      <div class="entree-beeld beeldvlak"><${Sfeerbeeld} naam=${omslag} /><${Merk} /></div>
+      <main class="entree-kaart">${children}</main>
+    </div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,19 +121,22 @@ function Start({ ik, offline, ga, laadIk, uitloggen }) {
   const kaart = (r) => html`
     <li>
       <a class="reiskaart" href=${`/reis/${r.id}/programma`} onClick=${open(r.id)}>
-        <span class="reiskaart-titel">${r.titel}</span>
-        <span class="reiskaart-datum">${periode(r.start_datum, r.eind_datum)}</span>
-        ${r.gearchiveerd
-          ? html`<span class="label">Afgesloten</span>`
-          : r.rol === 'groepsleider' ? html`<span class="label">Je bent groepsleider</span>` : null}
+        <span class="reiskaart-beeld beeldvlak"><${Sfeerbeeld} naam=${r.omslag} lui /></span>
+        <span class="reiskaart-tekst">
+          <span class="reiskaart-titel">${r.titel}</span>
+          <span class="reiskaart-datum">${periode(r.start_datum, r.eind_datum)}</span>
+          ${r.gearchiveerd
+            ? html`<span class="label">Afgesloten</span>`
+            : r.rol === 'groepsleider' ? html`<span class="label">Je bent groepsleider</span>` : null}
+        </span>
       </a>
     </li>`;
   const namen = [...new Set(ik.leden.map((l) => l.naam))];
 
   return html`
+    <div class="start">
+    <header class="start-kop beeldvlak"><${Sfeerbeeld} naam="zee" /><${Merk} /><h1>Mijn reizen</h1></header>
     <main class="smal">
-      <${Merk} />
-      <h1>Mijn reizen</h1>
       ${offline && html`<p class="status offline" role="status"><strong>Geen verbinding.</strong> Je ziet de reizen die op dit toestel staan.</p>`}
       ${ik.reizen.length === 0 && beheerOrgs.length === 0 && html`
         <p class="leeg">Er staan op dit moment geen reizen voor je klaar. Heb je een uitnodiging gekregen? Open dan de link uit die uitnodiging.</p>`}
@@ -144,7 +156,8 @@ function Start({ ik, offline, ga, laadIk, uitloggen }) {
       </section>
       ${nieuweReisVoor && html`<${ReisVenster} orgId=${nieuweReisVoor} onSluit=${() => setNieuweReisVoor(null)}
           onKlaar=${async (nieuw) => { setNieuweReisVoor(null); await laadIk(); ga(`/reis/${nieuw.id}/beheer`); }} />`}
-    </main>`;
+    </main>
+    </div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,8 +197,7 @@ function Uitnodiging({ token, ik, ga, laadIk }) {
   };
 
   return html`
-    <main class="smal welkom">
-      <${Merk} />
+    <${Entree} omslag=${staat.omslag}>
       ${staat.soort === 'laden' && html`<p class="laden">Je uitnodiging wordt opgezocht…</p>`}
       ${staat.soort === 'geldig' && html`
         <h1>Welkom, ${staat.naam}</h1>
@@ -209,7 +221,7 @@ function Uitnodiging({ token, ik, ga, laadIk }) {
         <h1>Geen verbinding</h1>
         <p>Om je uitnodiging te openen heb je één keer internet nodig. Open de link opnieuw zodra je verbinding hebt.</p>
         <p><button class="knop" onClick=${() => location.reload()}>Opnieuw proberen</button></p>`}
-    </main>`;
+    <//>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,8 +247,7 @@ function Inloggen({ offline, ga, laadIk }) {
   }
 
   return html`
-    <main class="smal welkom">
-      <${Merk} />
+    <${Entree}>
       <h1>Inloggen</h1>
       ${offline && html`<p class="status offline" role="status"><strong>Geen verbinding.</strong> Inloggen kan alleen als je internet hebt.</p>`}
       ${stap === 'email' ? html`
@@ -254,7 +265,7 @@ function Inloggen({ offline, ga, laadIk }) {
           <button class="knop groot" type="submit" disabled=${bezig}>${bezig ? 'Bezig…' : 'Log in'}</button>
         </form>
         <p><button class="knop kaal" onClick=${() => { setStap('email'); setCode(''); }}>Ander e-mailadres of nieuwe code</button></p>`}
-    </main>`;
+    <//>`;
 }
 
 function LoginLink({ token, ga, laadIk }) {
@@ -266,14 +277,13 @@ function LoginLink({ token, ga, laadIk }) {
     }
   }
   return html`
-    <main class="smal welkom">
-      <${Merk} />
+    <${Entree}>
       <h1>Inloggen</h1>
       <p>Tik op de knop om op dit toestel in te loggen.</p>
       <${Melding}>${fout}<//>
       <p><button class="knop groot" disabled=${bezig} onClick=${login}>${bezig ? 'Bezig…' : 'Log in op dit toestel'}</button></p>
       <p><a href="/inloggen" onClick=${(e) => { e.preventDefault(); ga('/inloggen', { vervang: true }); }}>Liever een nieuwe code aanvragen</a></p>
-    </main>`;
+    <//>`;
 }
 
 const houder = document.getElementById('app');

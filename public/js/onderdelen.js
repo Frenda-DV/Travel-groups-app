@@ -16,6 +16,13 @@ export function Icoon({ naam }) {
     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d=${PADEN[naam]} /></svg>`;
 }
 
+// Sfeerbeeld achter een kop of kaart. Puur decoratief (lege alt-tekst); lukt
+// laden niet, dan blijft het donkerblauwe vlak eronder gewoon staan.
+export function Sfeerbeeld({ naam, lui = false }) {
+  return html`<img src=${`/omslag/${naam || 'zee'}.jpg`} alt="" loading=${lui ? 'lazy' : 'eager'} decoding="async"
+    onError=${(e) => { e.target.hidden = true; }} />`;
+}
+
 // Venster bovenop het scherm, gebouwd op het standaard <dialog>-element zodat
 // toetsenbord en schermlezers het vanzelf goed doen.
 export function Venster({ titel, onSluit, children }) {

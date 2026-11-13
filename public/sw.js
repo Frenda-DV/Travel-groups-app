@@ -4,7 +4,7 @@
 // geserveerd terwijl op de achtergrond een verse versie wordt opgehaald.
 // Reisgegevens lopen hier NIET doorheen: die bewaart de app zelf in IndexedDB,
 // zodat ze bij uitloggen of ingetrokken toegang gericht gewist kunnen worden.
-const VERSIE = 'v1';
+const VERSIE = 'v2';
 const OPSLAG = `mee-op-reis-${VERSIE}`;
 const APP_BESTANDEN = [
   '/index.html',
@@ -21,12 +21,21 @@ const APP_BESTANDEN = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
+  '/fonts/fraunces.woff2',
+  '/fonts/albert-sans.woff2',
 ];
+// Sfeerbeelden zijn mooi maar niet nodig: mislukt er één, dan moet de app
+// nog steeds zonder internet werken. De overige beelden komen in de opslag
+// zodra ze voor het eerst getoond worden.
+const SFEERBEELDEN = ['/omslag/zee.jpg'];
 
 self.addEventListener('install', (gebeurtenis) => {
   gebeurtenis.waitUntil(
     caches.open(OPSLAG)
-      .then((opslag) => opslag.addAll(APP_BESTANDEN.map((pad) => new Request(pad, { cache: 'reload' }))))
+      .then(async (opslag) => {
+        await opslag.addAll(APP_BESTANDEN.map((pad) => new Request(pad, { cache: 'reload' })));
+        await Promise.all(SFEERBEELDEN.map((pad) => opslag.add(pad).catch(() => {})));
+      })
       .then(() => self.skipWaiting()),
   );
 });

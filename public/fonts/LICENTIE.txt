@@ -1,0 +1,6 @@
+Fraunces: Copyright 2020 The Fraunces Project Authors (github.com/undercasetype/Fraunces)
+Albert Sans: Copyright 2021 The Albert Sans Project Authors (github.com/usted/Albert-Sans)
+
+Beide lettertypen vallen onder de SIL Open Font License, versie 1.1
+(https://openfontlicense.org). De bestanden zijn de Latijnse subsets uit de
+pakketten @fontsource-variable/fraunces en @fontsource-variable/albert-sans.

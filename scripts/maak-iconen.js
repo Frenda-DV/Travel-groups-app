@@ -7,17 +7,25 @@ import { fileURLToPath } from 'node:url';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const map = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'icons');
 
-// Een zeilbootje onder een opkomende zon. "schaal" houdt het beeld binnen de
-// veilige zone van maskeerbare iconen (Android snijdt de randen af).
+// Een zeil in goud op marineblauw. "schaal" houdt het beeld binnen de veilige
+// zone van maskeerbare iconen (Android snijdt de randen af).
 const svg = (schaal, rond) => `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="${rond}" fill="#0b4f6c"/>
+  <defs>
+    <linearGradient id="goud" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b98a35"/><stop offset=".45" stop-color="#dcb05a"/>
+      <stop offset=".62" stop-color="#f0d492"/><stop offset="1" stop-color="#cf9d42"/>
+    </linearGradient>
+    <linearGradient id="nacht" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c2547"/><stop offset="1" stop-color="#04101f"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="${rond}" fill="url(#nacht)"/>
   <g transform="translate(256 256) scale(${schaal}) translate(-256 -256)">
-    <circle cx="352" cy="150" r="46" fill="#f2b632"/>
-    <path d="M236 96 L236 330 L112 330 Z" fill="#ffffff"/>
-    <path d="M262 150 L262 330 L372 330 Z" fill="#dbeaf1"/>
-    <path d="M88 356 H424 L384 420 H136 Z" fill="#ffffff"/>
-    <path d="M70 452 q31 -24 62 0 t62 0 t62 0 t62 0 t62 0 t62 0" fill="none" stroke="#9cc7da" stroke-width="16" stroke-linecap="round"/>
+    <path d="M244 84 C244 190 196 280 108 338 L244 338 Z" fill="url(#goud)"/>
+    <path d="M268 150 C300 220 344 290 396 338 L268 338 Z" fill="url(#goud)" opacity=".72"/>
+    <path d="M92 366 H420 C402 402 368 424 328 424 H184 C144 424 110 402 92 366 Z" fill="url(#goud)"/>
+    <path d="M96 462 q40 -22 80 0 t80 0 t80 0 t80 0" fill="none" stroke="#ecc87e" stroke-width="9" stroke-linecap="round" opacity=".7"/>
   </g>
 </svg>`;
 

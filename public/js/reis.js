@@ -5,7 +5,7 @@ import { html, useCallback, useEffect, useRef, useState } from './vendor/preact-
 import { api, GeenVerbinding } from './api.js';
 import { lees, bewaar, wisReis } from './opslag.js';
 import { isoDatum, klokTijd, datumLang, weekdagKort, dagMaand, moment, metLinks, moetErZijn, verschillen } from './hulp.js';
-import { Icoon, Melding, Venster } from './onderdelen.js';
+import { Icoon, Melding, Sfeerbeeld } from './onderdelen.js';
 import { OnderdeelVenster, DagVenster, InfoVenster, BerichtFormulier, Beheer } from './beheer.js';
 
 const VEROUDERD_NA = 12 * 3600 * 1000;
@@ -148,10 +148,12 @@ export function ReisScherm({ reisId, tab, ik, ga, laadIk, uitloggen }) {
 
   return html`
     <div class="reis">
-      <header class="kop">
+      <header class="kop beeldvlak">
+        <${Sfeerbeeld} naam=${reis.omslag} />
         ${meerdereReizen && html`<a class="terug" href="/" onClick=${(e) => { e.preventDefault(); ga('/'); }}><${Icoon} naam="terug" /> Alle reizen</a>`}
         <p class="kop-org">${reis.organisatie}</p>
         <h1>${reis.titel}</h1>
+        ${reis.ondertitel && html`<p class="kop-onder">${reis.ondertitel}</p>`}
       </header>
       <${StatusBalk} verbinding=${verbinding} opgehaald=${opgehaald} />
       <main class="inhoud" id="inhoud">
@@ -242,7 +244,7 @@ function Programma({ bundel, merken, begrepen, nu, magBeheren, ververs, gelezenT
     ${eerstvolgende && html`
       <div class="eerstvolgende" role="region" aria-label="Eerstvolgende">
         <p class="etiket">Eerstvolgende</p>
-        <p class="groot">${eerstvolgende.verzameltijd ? `Aanwezig om ${eerstvolgende.verzameltijd}` : eerstvolgende.begin_tijd}</p>
+        <p class="groot">${eerstvolgende.verzameltijd ? 'Aanwezig om ' : ''}<span class="groot-tijd">${eerstvolgende.verzameltijd || eerstvolgende.begin_tijd}</span></p>
         <p class="eerst-titel">${eerstvolgende.titel}${eerstvolgende.verzameltijd && eerstvolgende.begin_tijd ? ` (begint om ${eerstvolgende.begin_tijd})` : ''}</p>
         ${eerstvolgende.verzamelpunt && html`<p class="eerst-plek"><${Icoon} naam="plek" /> <span>${eerstvolgende.verzamelpunt}</span></p>`}
       </div>`}

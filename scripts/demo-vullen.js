@@ -70,8 +70,8 @@ const info = [
 const links = await alsEigenaar(async (db) => {
   const org = (await db.query(`insert into organisaties (naam) values ('Reisspecialist De Valk') returning id`)).rows[0].id;
   const reis = (await db.query(
-    `insert into reizen (org_id, titel, ondertitel, start_datum, eind_datum)
-     values ($1, 'Jubileumcruise Noorse fjorden', 'ms Rotterdam, Holland America Line', '2027-05-23', '2027-05-30') returning id`, [org])).rows[0].id;
+    `insert into reizen (org_id, titel, ondertitel, start_datum, eind_datum, omslag)
+     values ($1, 'Jubileumcruise Noorse fjorden', 'ms Rotterdam, Holland America Line', '2027-05-23', '2027-05-30', 'fjorden') returning id`, [org])).rows[0].id;
   for (const [datum, titel, ondertitel, toelichting, onderdelen] of dagen) {
     const dag = (await db.query(
       `insert into programma_dagen (org_id, reis_id, datum, titel, ondertitel, toelichting) values ($1, $2, $3, $4, $5, $6) returning id`,

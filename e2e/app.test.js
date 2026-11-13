@@ -255,7 +255,7 @@ describe('Twee organisaties op één toestel', () => {
   test('de volgende gebruiker, van een andere organisatie, ziet alleen de eigen reis', async () => {
     const link = (await nodigUitViaApi('leiderB1', 'B1', 'Quinta #B1#', 'quinta@b1.test')).link;
     await openUitnodiging(toestel.pagina, link);
-    assert.match(await toestel.pagina.locator('.kop').innerText(), /Noorderlicht Tours #B#[\s\S]*Noorse kust #B1#/);
+    assert.match(await toestel.pagina.locator('.kop').innerText(), /Noorderlicht Tours #B#[\s\S]*Noorse kust #B1#/i);
     await wachtOpOfflineKlaar(toestel.pagina);
     await toestel.context.setOffline(true);
     await toestel.pagina.reload();
