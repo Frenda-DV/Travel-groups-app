@@ -38,6 +38,7 @@ export async function migreer(adminUrl, { appWachtwoord, stil = false } = {}) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try { process.loadEnvFile(); } catch { /* geen .env: dan gelden de omgevingsvariabelen */ }
   const url = process.env.DATABASE_ADMIN_URL;
   if (!url) {
     console.error('Zet DATABASE_ADMIN_URL (eigenaar van de database).');

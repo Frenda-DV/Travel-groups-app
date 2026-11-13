@@ -1,0 +1,65 @@
+// Service worker: maakt de app zelf zonder internet beschikbaar.
+//
+// De app (html, css, js) wordt vooraf opgeslagen en daarna uit de opslag
+// geserveerd terwijl op de achtergrond een verse versie wordt opgehaald.
+// Reisgegevens lopen hier NIET doorheen: die bewaart de app zelf in IndexedDB,
+// zodat ze bij uitloggen of ingetrokken toegang gericht gewist kunnen worden.
+const VERSIE = 'v1';
+const OPSLAG = `mee-op-reis-${VERSIE}`;
+const APP_BESTANDEN = [
+  '/index.html',
+  '/css/app.css',
+  '/js/app.js',
+  '/js/api.js',
+  '/js/opslag.js',
+  '/js/hulp.js',
+  '/js/onderdelen.js',
+  '/js/reis.js',
+  '/js/beheer.js',
+  '/js/vendor/preact-htm.js',
+  '/manifest.webmanifest',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
+];
+
+self.addEventListener('install', (gebeurtenis) => {
+  gebeurtenis.waitUntil(
+    caches.open(OPSLAG)
+      .then((opslag) => opslag.addAll(APP_BESTANDEN.map((pad) => new Request(pad, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener('activate', (gebeurtenis) => {
+  gebeurtenis.waitUntil(
+    caches.keys()
+      .then((namen) => Promise.all(namen.filter((n) => n !== OPSLAG).map((n) => caches.delete(n))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+async function uitOpslagEnVerversen(gebeurtenis, sleutel) {
+  const opslag = await caches.open(OPSLAG);
+  const bewaard = await opslag.match(sleutel);
+  const vers = fetch(sleutel, { cache: 'no-cache' })
+    .then((antwoord) => {
+      if (antwoord.ok) opslag.put(sleutel, antwoord.clone());
+      return antwoord;
+    })
+    .catch(() => null);
+  if (bewaard) {
+    gebeurtenis.waitUntil(vers);
+    return bewaard;
+  }
+  return (await vers) || new Response('Geen verbinding.', { status: 503, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
+
+self.addEventListener('fetch', (gebeurtenis) => {
+  const verzoek = gebeurtenis.request;
+  const url = new URL(verzoek.url);
+  if (verzoek.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  // Elke schermadres (bijvoorbeeld /reis/…/programma) wordt door dezelfde app getoond.
+  const sleutel = verzoek.mode === 'navigate' ? '/index.html' : url.pathname;
+  gebeurtenis.respondWith(uitOpslagEnVerversen(gebeurtenis, sleutel));
+});
