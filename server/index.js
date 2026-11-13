@@ -2,10 +2,12 @@ import { serve } from '@hono/node-server';
 import { maakPool, controleerAppRol } from './db.js';
 import { maakMail } from './mail.js';
 import { maakApp } from './app.js';
+import { databaseUrls } from './omgeving.js';
 
 try { process.loadEnvFile(); } catch { /* geen .env: dan gelden de omgevingsvariabelen */ }
 
-const { DATABASE_URL, BASIS_URL, PORT = '3000', RESEND_API_KEY, MAIL_AFZENDER, VERTROUW_PROXY } = process.env;
+const { BASIS_URL, PORT = '3000', RESEND_API_KEY, MAIL_AFZENDER, VERTROUW_PROXY } = process.env;
+const DATABASE_URL = databaseUrls().app;
 if (!DATABASE_URL) {
   console.error('DATABASE_URL ontbreekt. Kopieer .env.example naar .env en vul hem in.');
   process.exit(1);

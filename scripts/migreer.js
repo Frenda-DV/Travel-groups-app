@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { databaseUrls } from '../server/omgeving.js';
 
 const sqlMap = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'sql');
 
@@ -39,7 +40,7 @@ export async function migreer(adminUrl, { appWachtwoord, stil = false } = {}) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try { process.loadEnvFile(); } catch { /* geen .env: dan gelden de omgevingsvariabelen */ }
-  const url = process.env.DATABASE_ADMIN_URL;
+  const url = databaseUrls().admin;
   if (!url) {
     console.error('Zet DATABASE_ADMIN_URL (eigenaar van de database).');
     process.exit(1);

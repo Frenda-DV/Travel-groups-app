@@ -5,13 +5,10 @@
 // opgehaald op 13 november 2026. Wat daar NIET staat is niet verzonnen: de
 // vertrektijd van de touringcar is leeg gelaten en als "volgt nog" gemarkeerd.
 // Het voorbeeldbericht is als voorbeeld herkenbaar. Loop alles na voor gebruik.
+import { fileURLToPath } from 'node:url';
 import { alsEigenaar, nodigUit } from './hulp.js';
 
-const email = process.argv[2];
-if (!email) {
-  console.error('Gebruik: npm run demo -- beheerder@voorbeeld.nl');
-  process.exit(1);
-}
+export const DEMO_ORGANISATIE = 'Reisspecialist De Valk';
 
 const dagen = [
   ['2027-05-23', 'Rotterdam', 'Inschepen, vertrek rond 15:00',
@@ -67,8 +64,10 @@ const info = [
   ['Taal aan boord', 'De voertaal aan boord is Engels.'],
 ];
 
-const links = await alsEigenaar(async (db) => {
-  const org = (await db.query(`insert into organisaties (naam) values ('Reisspecialist De Valk') returning id`)).rows[0].id;
+// Zet organisatie, reis, programma en drie proefaccounts klaar. Geeft de
+// eenmalige links terug.
+export async function vulDemo(db, email) {
+  const org = (await db.query('insert into organisaties (naam) values ($1) returning id', [DEMO_ORGANISATIE])).rows[0].id;
   const reis = (await db.query(
     `insert into reizen (org_id, titel, ondertitel, start_datum, eind_datum, omslag)
      values ($1, 'Jubileumcruise Noorse fjorden', 'ms Rotterdam, Holland America Line', '2027-05-23', '2027-05-30', 'fjorden') returning id`, [org])).rows[0].id;
@@ -87,16 +86,17 @@ const links = await alsEigenaar(async (db) => {
     await db.query('insert into info_blokken (org_id, reis_id, titel, tekst, volgorde) values ($1, $2, $3, $4, $5)', [org, reis, titel, tekst, i + 1]);
   }
   await db.query(
-    `insert into berichten (org_id, reis_id, tekst, auteur_naam) values ($1, $2, $3, 'Reisspecialist De Valk')`,
-    [org, reis, 'Voorbeeldbericht: welkom in de app van onze jubileumcruise. Hier lees je straks onze berichten tijdens de reis.']);
+    `insert into berichten (org_id, reis_id, tekst, auteur_naam) values ($1, $2, $3, $4)`,
+    [org, reis, 'Voorbeeldbericht: welkom in de app van onze jubileumcruise. Hier lees je straks onze berichten tijdens de reis.', DEMO_ORGANISATIE]);
   return {
     beheerder: await nodigUit(db, { orgId: org, rol: 'beheerder', naam: 'Beheerder De Valk', email }),
     groepsleider: await nodigUit(db, { orgId: org, reisId: reis, rol: 'groepsleider', naam: 'Proef Groepsleider', email: 'groepsleider@voorbeeld.test' }),
     deelnemer: await nodigUit(db, { orgId: org, reisId: reis, rol: 'deelnemer', naam: 'Proef Deelnemer', email: 'deelnemer@voorbeeld.test' }),
   };
-});
+}
 
-console.log(`De Jubileumcruise staat klaar. Eenmalige links om de app te proberen:
+export function toonLinks(links, email) {
+  console.log(`De Jubileumcruise staat klaar. Eenmalige links om de app te proberen:
 
 Beheerder (${email}):
 ${links.beheerder}
@@ -107,3 +107,13 @@ ${links.groepsleider}
 Deelnemer (proefaccount):
 ${links.deelnemer}
 `);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const email = process.argv[2];
+  if (!email) {
+    console.error('Gebruik: npm run demo -- beheerder@voorbeeld.nl');
+    process.exit(1);
+  }
+  toonLinks(await alsEigenaar((db) => vulDemo(db, email)), email);
+}

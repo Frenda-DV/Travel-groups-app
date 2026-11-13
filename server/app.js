@@ -68,9 +68,13 @@ async function invoer(c) {
 
 // ---------------------------------------------------------------------------
 
-export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
+// basisUrl: publiek adres voor links in mails. Leeg laten mag: dan geldt het
+//   adres waarop de aanvraag binnenkwam.
+// gereed: een belofte die eerst moet slagen (de controle op de databaserol)
+//   voordat er ook maar één aanvraag bij de database komt.
+export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veilig = basisUrl.startsWith('https://'), gereed = null }) {
   const app = new Hono();
-  const veilig = basisUrl.startsWith('https://');
+  const adresVan = (c) => basisUrl || new URL(c.req.url).origin;
   const COOKIE = veilig ? '__Host-sessie' : 'sessie';
   const teVaak = maakLimiet();
 
@@ -123,6 +127,7 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
         return c.json({ fout: 'Aanvraag vanaf een andere website geweigerd.' }, 403);
       }
     }
+    if (gereed) await gereed;
     const db = await pool.connect();
     try {
       await db.query('begin');
@@ -209,7 +214,7 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
       'select auth_login_aanvragen($1, $2, $3, $4) as bekend',
       [email, hash(token), codeHash(email, code), new Date(Date.now() + KWARTIER)]);
     if (rows[0].bekend) {
-      await mail.stuur({ aan: email, ...inlogMail({ code, link: `${basisUrl}/l/${token}` }) });
+      await mail.stuur({ aan: email, ...inlogMail({ code, link: `${adresVan(c)}/l/${token}` }) });
     }
     // Altijd hetzelfde antwoord: zo is niet te achterhalen wie deelnemer is.
     return c.json({ ok: true });
@@ -515,7 +520,7 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
         resultaat.push({ ...lid, status: 'bestond_al' });
         continue;
       }
-      const link = `${basisUrl}/u/${token}`;
+      const link = `${adresVan(c)}/u/${token}`;
       const gemaild = await mail.stuur({
         aan: lid.email,
         ...uitnodigingsMail({ naam: lid.naam, reis: reis.titel, organisatie: reis.organisatie, link, rol: lid.rol }),
@@ -542,7 +547,7 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
       `select lid_nieuwe_link($1, $2, greatest(now() + interval '30 days', $3::date + 2)) as gelukt`,
       [lid.id, hash(token), lid.eind_datum ?? new Date()]);
     if (!rows[0].gelukt) throw new Fout(403, 'Je kunt voor deze persoon geen nieuwe link maken.');
-    const link = `${basisUrl}/u/${token}`;
+    const link = `${adresVan(c)}/u/${token}`;
     const gemaild = await mail.stuur({
       aan: lid.email,
       ...uitnodigingsMail({ naam: lid.naam, reis: lid.reis, organisatie: lid.organisatie, link, rol: lid.rol }),
@@ -595,18 +600,34 @@ export function maakApp({ pool, mail, basisUrl, vertrouwProxy = false }) {
     '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
     '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon',
   };
-  app.get('*', (c) => {
-    let pad = decodeURIComponent(new URL(c.req.url).pathname);
-    let bestand = path.join(publiekeMap, path.normalize(pad));
+  // Op Vercel serveert het CDN de bestanden uit public/ zelf en komen hier
+  // alleen de schermadressen binnen (/reis/..., /u/...). De functie heeft dan
+  // geen public-map bij zich en haalt index.html één keer bij het CDN op.
+  let indexVanCdn = null;
+  async function indexHtml(c) {
+    const lokaal = path.join(publiekeMap, 'index.html');
+    if (fs.existsSync(lokaal)) return fs.readFileSync(lokaal);
+    if (!indexVanCdn) {
+      const antwoord = await fetch(new URL('/index.html', c.req.url));
+      if (!antwoord.ok) throw new Error(`index.html niet gevonden (${antwoord.status})`);
+      indexVanCdn = Buffer.from(await antwoord.arrayBuffer());
+    }
+    return indexVanCdn;
+  }
+
+  app.get('*', async (c) => {
+    const pad = decodeURIComponent(new URL(c.req.url).pathname);
+    const bestand = path.join(publiekeMap, path.normalize(pad));
     const bestaat = bestand.startsWith(publiekeMap + path.sep) && TYPES[path.extname(bestand)]
       && fs.existsSync(bestand) && fs.statSync(bestand).isFile();
-    if (!bestaat) {
-      if (path.extname(pad)) return c.text('Niet gevonden.', 404);
-      bestand = path.join(publiekeMap, 'index.html'); // alle schermen lopen via de app
-    }
-    c.header('Content-Type', TYPES[path.extname(bestand)]);
     c.header('Cache-Control', 'no-cache');
-    return c.body(fs.readFileSync(bestand));
+    if (bestaat) {
+      c.header('Content-Type', TYPES[path.extname(bestand)]);
+      return c.body(fs.readFileSync(bestand));
+    }
+    if (path.extname(pad)) return c.text('Niet gevonden.', 404);
+    c.header('Content-Type', TYPES['.html']); // alle schermen lopen via de app
+    return c.body(await indexHtml(c));
   });
 
   return app;

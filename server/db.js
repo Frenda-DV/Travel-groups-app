@@ -3,8 +3,8 @@ import pg from 'pg';
 // Datums als 'JJJJ-MM-DD' laten staan: een programma-dag heeft geen tijdzone.
 pg.types.setTypeParser(1082, (waarde) => waarde);
 
-export function maakPool(url) {
-  return new pg.Pool({ connectionString: url, max: 10 });
+export function maakPool(url, opties = {}) {
+  return new pg.Pool({ connectionString: url, max: 10, ...opties });
 }
 
 // De hele toegangsbeveiliging leunt op row-level security. Die geldt niet voor

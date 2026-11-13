@@ -10,6 +10,7 @@ Eerste gebruik: de Jubileumcruise 2027 van Reisspecialist De Valk. Daarna inzetb
 
 | Functie | In v1? | Waarom |
 |---|---|---|
+| Sfeerbeeld per reis | Ja | De beheerder kiest uit een vaste set meegeleverde beelden. Geen eigen uploads. |
 | Dagprogramma met tijden, "aanwezig om" en verzamelpunt | Ja | De kern. De velden volgen het echte excursieprogramma van de jubileumcruise. |
 | Programma, info en berichten zonder internet | Ja | Het laatst opgehaalde programma staat op het toestel, met het tijdstip erbij. |
 | Praktische informatie | Ja | Telefoonnummers, e-mail en webadressen worden vanzelf aanklikbaar. |
@@ -70,9 +71,19 @@ npm run org:nieuw -- "Naam organisatie" "Naam beheerder" beheerder@voorbeeld.nl
 
 Met `RESEND_API_KEY` en `MAIL_AFZENDER` verstuurt de app uitnodigingen en inlogcodes via Resend. Zonder sleutel verschijnen mails alleen in de serverlog. Uitnodigingslinks kun je altijd ook zelf doorsturen, bijvoorbeeld via WhatsApp.
 
-### Online zetten
+### Online zetten op Vercel
 
-De app is één Node-proces plus een Postgres-database en moet via https bereikbaar zijn (anders is hij niet installeerbaar en werkt offline niet). Zet `BASIS_URL` op het publieke adres en `VERTROUW_PROXY=1` als er een proxy voor staat.
+De app moet via https bereikbaar zijn, anders is hij niet installeerbaar en werkt offline niet. Vercel herkent de app aan `index.js` en serveert de map `public/` zelf.
+
+1. Koppel de GitHub-repository aan een nieuw Vercel-project.
+2. Koppel in Vercel onder Storage een Postgres-database (bijvoorbeeld Neon) aan het project. Die levert `DATABASE_URL` en `DATABASE_URL_UNPOOLED` aan.
+3. Zet de omgevingsvariabele `APP_DB_PASSWORD` op een lang, willekeurig wachtwoord. De app draait daarmee als de beperkte rol `reisapp_app`; met de eigenaar uit `DATABASE_URL` weigert hij te werken.
+4. Zet eenmalig `DEMO_BEHEERDER` op je e-mailadres om de Jubileumcruise klaar te zetten, of `EERSTE_ORGANISATIE` op `Naam organisatie|Naam beheerder|adres@voorbeeld.nl`. De eenmalige links staan daarna in de build-log.
+5. Zet `RESEND_API_KEY` en `MAIL_AFZENDER` voor uitnodigingen en inlogcodes per e-mail.
+
+Bij elke build werkt `npm run vercel-build` de database bij. Inrichten gebeurt alleen als de organisatie nog niet bestaat.
+
+Op een gewone server is het één Node-proces (`npm start`) plus een Postgres-database. Zet daar `BASIS_URL` op het publieke adres en `VERTROUW_PROXY=1` als er een proxy voor staat.
 
 ## Testen
 
@@ -101,6 +112,7 @@ Niet door deze tests gedekt: een echte iPhone (Safari), echte bezorging van e-ma
 | Map | Inhoud |
 |---|---|
 | `sql/` | Schema, row-level security en de functies voor inloggen en uitnodigen |
+| `index.js`, `vercel.json` | Startpunt en instellingen voor Vercel |
 | `server/` | API (Hono), sessies, mail |
 | `public/` | De app zelf: geen bouwstap, gewone JavaScript-modules, service worker |
 | `scripts/` | Migreren, organisatie aanmaken, demo vullen |

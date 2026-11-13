@@ -2,11 +2,12 @@
 // database en zijn bedoeld voor wie de app beheert, niet voor reisorganisaties.
 import pg from 'pg';
 import { nieuwToken, hash } from '../server/beveiliging.js';
+import { databaseUrls, publiekAdres } from '../server/omgeving.js';
 
 try { process.loadEnvFile(); } catch { /* geen .env */ }
 
 export async function alsEigenaar(werk) {
-  const url = process.env.DATABASE_ADMIN_URL;
+  const url = databaseUrls().admin;
   if (!url) {
     console.error('Zet DATABASE_ADMIN_URL (eigenaar van de database), bijvoorbeeld in .env.');
     process.exit(1);
@@ -26,7 +27,7 @@ export async function alsEigenaar(werk) {
   }
 }
 
-export const basisUrl = () => (process.env.BASIS_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+export const basisUrl = () => publiekAdres() || `http://localhost:${process.env.PORT || 3000}`;
 
 // Maakt een lidmaatschap met een eenmalige uitnodigingslink (30 dagen geldig).
 export async function nodigUit(db, { orgId, reisId = null, rol, naam, email }) {
