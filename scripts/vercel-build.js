@@ -60,12 +60,33 @@ if (fs.existsSync('rooktest.json')) {
     org ??= (await db.query('insert into organisaties (naam) values ($1) returning id', [proef.organisatie])).rows[0].id;
     const lid = (await db.query('select id from lidmaatschappen where org_id = $1 and reis_id is null and email = $2', [org, proef.email])).rows[0];
     if (!lid) return nodigUit(db, { orgId: org, rol: 'beheerder', naam: proef.beheerder, email: proef.email });
-    const token = nieuwToken();
-    await db.query(
-      `update lidmaatschappen set uitnodiging_hash = $2, uitnodiging_verloopt_op = now() + interval '1 day',
-         uitnodiging_gebruikt_op = null, ingetrokken_op = null where id = $1`, [lid.id, hash(token)]);
-    await db.query('delete from sessie_toegang where lidmaatschap_id = $1', [lid.id]);
-    return `${basisUrl()}/u/${token}`;
+    return verseLink(db, lid.id, 1);
   });
   console.log(`ROOKTEST ${link}`);
+}
+
+// Nieuwe beheerderslink op verzoek, voor als inloggen per e-mail (nog) niet
+// werkt. Zet een leeg bestand "nieuwe-beheerderslink" in de repository: de
+// eerstvolgende build maakt dan een verse, eenmalige link (7 dagen geldig) voor
+// de beheerder uit DEMO_BEHEERDER en zet hem in de build-log. Haal het bestand
+// daarna weer weg, anders vervalt de toegang bij elke build opnieuw.
+if (fs.existsSync('nieuwe-beheerderslink') && DEMO_BEHEERDER) {
+  const link = await alsEigenaar(async (db) => {
+    const lid = (await db.query(
+      `select l.id from lidmaatschappen l join organisaties o on o.id = l.org_id
+       where o.naam = $1 and l.reis_id is null and l.rol = 'beheerder' and l.email = $2`,
+      [DEMO_ORGANISATIE, DEMO_BEHEERDER.trim().toLowerCase()])).rows[0];
+    return lid ? verseLink(db, lid.id, 7) : null;
+  });
+  console.log(link ? `BEHEERDERSLINK ${link}` : `Geen beheerder gevonden voor ${DEMO_ORGANISATIE}.`);
+}
+
+// Geeft een bestaand lidmaatschap een verse, eenmalige link. Bestaande toegang vervalt.
+async function verseLink(db, lidId, dagen) {
+  const token = nieuwToken();
+  await db.query(
+    `update lidmaatschappen set uitnodiging_hash = $2, uitnodiging_verloopt_op = now() + make_interval(days => $3),
+       uitnodiging_gebruikt_op = null, ingetrokken_op = null where id = $1`, [lidId, hash(token), dagen]);
+  await db.query('delete from sessie_toegang where lidmaatschap_id = $1', [lidId]);
+  return `${basisUrl()}/u/${token}`;
 }
