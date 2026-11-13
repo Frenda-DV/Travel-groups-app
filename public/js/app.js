@@ -266,7 +266,8 @@ function Inloggen({ offline, ga, laadIk }) {
           <${Melding}>${fout}<//>
           <button class="knop groot" type="submit" disabled=${bezig}>${bezig ? 'Bezig…' : 'Log in'}</button>
         </form>
-        <p><button class="knop kaal" onClick=${() => { setStap('email'); setCode(''); }}>Ander e-mailadres of nieuwe code</button></p>`}
+        <p><button class="knop kaal" onClick=${() => { setStap('email'); setCode(''); }}>Ander e-mailadres of nieuwe code</button></p>
+        <p class="uitleg">Komt er na een paar minuten geen mail? Controleer het adres, of vraag je reisleiding om een nieuwe persoonlijke link.</p>`}
     <//>`;
 }
 

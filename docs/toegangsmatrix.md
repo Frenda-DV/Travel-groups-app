@@ -9,10 +9,13 @@ Wie mag wat. Deze tabel is de bron voor de regels in `sql/001_schema.sql` en voo
 | Programma, info en berichten lezen | Ja | Ja | Ja | Nee |
 | Programma en info wijzigen | Ja | Ja | Nee | Nee |
 | Berichten plaatsen en verwijderen | Ja | Ja | Nee | Nee |
+| Foto's van de reisleiding bekijken | Ja | Ja | Ja | Nee |
+| Foto's toevoegen en weghalen (omslag, dag, onderdeel, bericht) | Ja | Ja | Nee | Nee |
 | Deelnemerslijst bekijken en exporteren | Ja | Ja | Nee | Nee |
 | Deelnemers uitnodigen, nieuwe link, intrekken | Ja | Ja | Nee | Nee |
 | Groepsleiders aanwijzen, nieuwe link, intrekken | Ja | Nee | Nee | Nee |
 | Reis aanmaken, wijzigen, afsluiten | Ja | Nee | Nee | Nee |
+| Afgesloten reis definitief verwijderen | Ja | Nee | Nee | Nee |
 | Namen van de groepsleiders zien | Ja | Ja | Ja | Nee |
 | Gegevens van andere deelnemers zien | Ja | Ja | Nee | Nee |
 | Privénotities van een ander lezen | Nee | Nee | Nee | Nee |
@@ -20,6 +23,8 @@ Wie mag wat. Deze tabel is de bron voor de regels in `sql/001_schema.sql` en voo
 | Afgesloten reis openen | Ja | Nee | Nee | Nee |
 
 Privénotities staan alleen op het toestel van de deelnemer; de server heeft er geen opslag voor.
+
+Een foto hoort bij precies één reis en kan alleen aan iets van diezelfde reis worden gekoppeld; de database weigert elke andere combinatie. Foto's die op een toestel zijn bewaard voor gebruik zonder internet worden gewist bij uitloggen en bij ingetrokken toegang.
 
 ## Hoe het wordt afgedwongen
 

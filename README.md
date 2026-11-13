@@ -10,14 +10,16 @@ Eerste gebruik: de Jubileumcruise 2027 van Reisspecialist De Valk. Daarna inzetb
 
 | Functie | In v1? | Waarom |
 |---|---|---|
-| Sfeerbeeld per reis | Ja | De beheerder kiest uit een vaste set meegeleverde beelden. Geen eigen uploads. |
+| Sfeerbeeld per reis | Ja | De beheerder kiest uit vijf meegeleverde beelden of zet er een eigen omslagfoto op. |
+| Eigen foto's van de reisleiding | Ja | Bij een dag, bij een programma-onderdeel (bijvoorbeeld het verzamelpunt) en bij een bericht. De app verkleint de foto en haalt de locatiegegevens eruit. Ook offline te zien. |
 | Dagprogramma met tijden, "aanwezig om" en verzamelpunt | Ja | De kern. De velden volgen het echte excursieprogramma van de jubileumcruise. |
 | Programma, info en berichten zonder internet | Ja | Het laatst opgehaalde programma staat op het toestel, met het tijdstip erbij. |
 | Praktische informatie | Ja | Telefoonnummers, e-mail en webadressen worden vanzelf aanklikbaar. |
 | Berichten van de reisleiding | Ja | Eén richting. Belangrijke berichten staan ook boven het programma. |
 | Meldingen | In de app, geen push | Ongelezen-teller, "belangrijk"-balk en een overzicht van wat gewijzigd of vervallen is. Push werkt op iPhone alleen na installatie op het beginscherm en komt op scheepswifi onbetrouwbaar aan: te wankel om op te leunen bij een gewijzigde vertrektijd. |
 | Privénotities | Ja, alleen op het eigen toestel | Notities gaan nooit naar de server. Daardoor werken ze offline en zijn ze ook voor de reisleiding echt privé. Keerzijde: ze verdwijnen bij uitloggen of een nieuw toestel. |
-| Gedeelde foto's | Nee | Portretrecht en toestemming (AVG), moderatie, opslagkosten en uploaden via scheepswifi. Alternatief: zet een link naar een gedeeld album in de praktische informatie. |
+| Foto's van deelnemers | Nee | Portretrecht en toestemming (AVG), moderatie, opslagkosten en uploaden via scheepswifi. Alternatief: zet een link naar een gedeeld album in de praktische informatie. |
+| Reis verwijderen | Ja | Een afgesloten reis kan de beheerder definitief verwijderen, met programma, berichten, foto's en deelnemerslijst. |
 | Exports | Ja, klein | Deelnemerslijst als csv (voor Excel) en het hele programma afdrukken voor deelnemers zonder smartphone. |
 | Organisaties zelf laten aanmelden | Nee | Een nieuwe organisatie maak je aan met één commando. |
 
@@ -91,7 +93,7 @@ Op een gewone server is het één Node-proces (`npm start`) plus een Postgres-da
 npm test
 ```
 
-Toegangsmatrix: 15 personen (beheerders, groepsleiders, deelnemers, ingetrokken, verlopen, niet ingelogd) bij twee fictieve organisaties met elk twee reizen. Eerst rechtstreeks op de database zonder enig filter, daarna 1380 API-aanvragen, daarna de aanvallen rond uitnodigen. Geslaagd betekent: geen enkele rij of wijziging buiten de eigen reizen.
+Toegangsmatrix: 15 personen (beheerders, groepsleiders, deelnemers, ingetrokken, verlopen, niet ingelogd) bij twee fictieve organisaties met elk twee reizen. Eerst rechtstreeks op de database zonder enig filter, daarna 1620 API-aanvragen, daarna de aanvallen rond uitnodigen. Geslaagd betekent: geen enkele rij of wijziging buiten de eigen reizen.
 
 ```bash
 npm run test:e2e
@@ -105,6 +107,16 @@ npm install --no-save playwright && npx playwright install chromium
 
 De tests gebruiken de databases `reisapp_test` en `reisapp_e2e` (of `TEST_DATABASE_ADMIN_URL`) en maken die telkens leeg.
 
+### De live-omgeving testen
+
+```bash
+npm run test:live -- https://jouw-adres.nl "eenmalige link uit de build-log" [id van een reis van een andere organisatie]
+```
+
+Staat `rooktest.json` in de repository, dan maakt elke build op Vercel een aparte testorganisatie met alleen fictieve gegevens en zet hij onder `ROOKTEST` een verse, eenmalige beheerderslink in de build-log. De rooktest maakt daarin een reis aan, loopt de app door als beheerder, groepsleider en deelnemer (ook zonder verbinding, met foto's) en verwijdert de reis weer. Met het derde argument controleert hij ook dat de testdeelnemer niet bij een reis van een andere organisatie kan.
+
+Let op: elke build op Vercel heeft ook een eigen, vast adres (`...-projects.vercel.app`). Dat adres blijft altijd die ene oude versie tonen. Gebruik en deel alleen het productie-adres.
+
 Niet door deze tests gedekt: een echte iPhone (Safari), echte bezorging van e-mail en gebruik door echte deelnemers. Zie [docs/testscript-deelnemer.md](docs/testscript-deelnemer.md).
 
 ## Indeling
@@ -116,4 +128,4 @@ Niet door deze tests gedekt: een echte iPhone (Safari), echte bezorging van e-ma
 | `server/` | API (Hono), sessies, mail |
 | `public/` | De app zelf: geen bouwstap, gewone JavaScript-modules, service worker |
 | `scripts/` | Migreren, organisatie aanmaken, demo vullen |
-| `test/`, `e2e/` | Toegangsmatrix en browsertests |
+| `test/`, `e2e/` | Toegangsmatrix, browsertests en de rooktest voor de live-omgeving |

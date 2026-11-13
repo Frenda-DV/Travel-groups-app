@@ -136,7 +136,11 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     try {
       if (gereed) await gereed();
       await metHerkansing(() => pool.query('select 1'));
-      return c.json({ ok: true, database: 'ok', mail: mail.actief ? 'ingesteld' : 'niet ingesteld' });
+      return c.json({
+        ok: true,
+        database: 'ok',
+        mail: mail.actief ? `ingesteld; laatste verzending: ${mail.stand?.laatste ?? 'onbekend'}` : 'niet ingesteld',
+      });
     } catch (fout) {
       console.error('Database niet bereikbaar:', fout);
       const code = fout.code || (/Geen database/.test(fout.message) ? 'niet-ingesteld' : 'onbekend');

@@ -3,6 +3,8 @@
 // ontwikkelen en te testen, niet voor echt gebruik.
 export function maakMail({ resendKey, afzender, stil = false } = {}) {
   const postbus = [];
+  // Uitkomst van de laatste verzending, zonder adressen: voor de statuscontrole.
+  const stand = { laatste: 'nog niets verstuurd' };
 
   async function stuur({ aan, onderwerp, tekst }) {
     if (!resendKey) {
@@ -17,13 +19,18 @@ export function maakMail({ resendKey, afzender, stil = false } = {}) {
       body: JSON.stringify({ from: afzender, to: [aan], subject: onderwerp, text: tekst }),
     });
     if (!antwoord.ok) {
-      console.error(`Mail naar ${aan} mislukt: ${antwoord.status} ${await antwoord.text()}`);
+      const tekst = await antwoord.text();
+      console.error(`Mail naar ${aan} mislukt: ${antwoord.status} ${tekst}`);
+      let reden = '';
+      try { reden = JSON.parse(tekst).message || ''; } catch { /* geen json */ }
+      stand.laatste = `mislukt (${antwoord.status}${reden ? `: ${reden.slice(0, 160)}` : ''})`;
       return false;
     }
+    stand.laatste = 'gelukt';
     return true;
   }
 
-  return { stuur, postbus, actief: Boolean(resendKey) };
+  return { stuur, postbus, actief: Boolean(resendKey), stand };
 }
 
 export function uitnodigingsMail({ naam, reis, organisatie, link, rol }) {
