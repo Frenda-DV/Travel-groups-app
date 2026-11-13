@@ -13,7 +13,9 @@ Wie mag wat. Deze tabel is de bron voor de regels in `sql/001_schema.sql` en voo
 | Foto's toevoegen en weghalen (omslag, dag, onderdeel, bericht) | Ja | Ja | Nee | Nee |
 | Deelnemerslijst bekijken en exporteren | Ja | Ja | Nee | Nee |
 | Deelnemers uitnodigen, nieuwe link, intrekken | Ja | Ja | Nee | Nee |
-| Groepsleiders aanwijzen, nieuwe link, intrekken | Ja | Nee | Nee | Nee |
+| Naam van een deelnemer wijzigen | Ja | Ja | Nee | Nee |
+| Groepsleiders aanwijzen, naam wijzigen, nieuwe link, intrekken | Ja | Nee | Nee | Nee |
+| Naam van een beheerder wijzigen (ook de eigen naam) | Ja | Nee | Nee | Nee |
 | Reis aanmaken, wijzigen, afsluiten | Ja | Nee | Nee | Nee |
 | Afgesloten reis definitief verwijderen | Ja | Nee | Nee | Nee |
 | Namen van de groepsleiders zien | Ja | Ja | Ja | Nee |

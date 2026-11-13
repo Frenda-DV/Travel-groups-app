@@ -286,6 +286,15 @@ describe('2. API: elke persoon x elke reis x elke actie', () => {
         effect: async () => (await q('select 1 from lidmaatschappen where email = $1', [email])).length === 1,
         opruimen: () => q('delete from lidmaatschappen where email = $1', [email]) };
     }],
+    ['naam van een deelnemer wijzigen', 'beheren', async (r) => {
+      const id = await versLid(r, 'deelnemer');
+      return { methode: 'PUT', pad: `/api/leden/${id}`, body: { naam: `Hernoemd ${merk(r)}` }, effect: async () => (await veld('lidmaatschappen', 'naam', id)).startsWith('Hernoemd') };
+    }],
+    ['naam van een groepsleider wijzigen', 'beheerder', async (r) => {
+      const id = await versLid(r, 'groepsleider');
+      return { methode: 'PUT', pad: `/api/leden/${id}`, body: { naam: `Hernoemd ${merk(r)}` }, effect: async () => (await veld('lidmaatschappen', 'naam', id)).startsWith('Hernoemd'),
+        opruimen: () => q('delete from lidmaatschappen where id = $1', [id]) };
+    }],
     ['nieuwe link voor deelnemer', 'beheren', async (r) => {
       const id = await versLid(r, 'deelnemer');
       return { methode: 'POST', pad: `/api/leden/${id}/nieuwe-link`, effect: async () => (await veld('lidmaatschappen', 'uitnodiging_hash', id)) != null };
@@ -548,6 +557,23 @@ describe('3. Uitnodigen, inloggen en intrekken', () => {
     assert.equal((await vraag('leiderB1', 'DELETE', `/api/berichten/${bericht.json.id}`)).status, 200);
     assert.equal((await q('select 1 from afbeeldingen where id = $1', [foto])).length, 0, 'foto verdwijnt met het bericht');
     assert.equal((await vraag('eva', 'GET', `/api/afbeeldingen/${foto}`)).status, 404);
+  });
+
+  test('namen: de beheerder past de eigen naam aan en die staat daarna bij nieuwe berichten', async () => {
+    const reis = zaad.ids.reis.B1;
+    const lijst = await vraag('beheerderB', 'GET', `/api/reizen/${reis}/leden`);
+    assert.deepEqual(lijst.json.beheerders.map((b) => b.email), ['beheer@b.test'], 'beheerder ziet de beheerders van de eigen organisatie');
+    assert.deepEqual((await vraag('leiderB1', 'GET', `/api/reizen/${reis}/leden`)).json.beheerders, [], 'een groepsleider ziet de beheerders niet');
+    assert.equal((await vraag('beheerderB', 'PUT', `/api/leden/${zaad.ids.lid.beheerderB}`, { naam: 'Bente van Noorderlicht #B#' })).status, 200);
+    assert.equal((await vraag('beheerderB', 'PUT', `/api/leden/${zaad.ids.lid.beheerderB}`, { naam: '   ' })).status, 400, 'een lege naam mag niet');
+    await vraag('beheerderB', 'POST', `/api/reizen/${reis}/berichten`, { tekst: 'Tot morgen #B1#' });
+    const bundel = await vraag('eva', 'GET', `/api/reizen/${reis}/bundel`);
+    assert.equal(bundel.json.berichten[0].auteur_naam, 'Bente van Noorderlicht #B#');
+    // een groepsleider kan de eigen naam en die van de beheerder niet wijzigen, een deelnemer niets
+    assert.equal((await vraag('leiderB1', 'PUT', `/api/leden/${zaad.ids.lid.leiderB1}`, { naam: 'x' })).status, 403);
+    assert.equal((await vraag('leiderB1', 'PUT', `/api/leden/${zaad.ids.lid.beheerderB}`, { naam: 'x' })).status, 404);
+    assert.equal((await vraag('eva', 'PUT', `/api/leden/${zaad.ids.lid.eva}`, { naam: 'x' })).status, 403);
+    assert.equal((await vraag('beheerderA', 'PUT', `/api/leden/${zaad.ids.lid.eva}`, { naam: 'x' })).status, 404, 'andere organisatie');
   });
 
   test('uitloggen maakt de sessie ongeldig', async () => {

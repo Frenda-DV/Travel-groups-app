@@ -111,6 +111,14 @@ describe('Deelnemer en groepsleider, op de eerste ochtend van de reis', () => {
     assert.match(uitnodiging, /\/u\/[\w-]{40,}$/);
     await leider.pagina.getByText('Truus Test').first().waitFor();
     await foto(leider.pagina, 'leider-uitnodigen');
+
+    // Een naam verbeteren.
+    await leider.pagina.getByRole('button', { name: 'Klaar' }).click();
+    await leider.pagina.getByRole('button', { name: 'Wijzig naam van Wim Test' }).click();
+    await leider.pagina.getByLabel('Naam', { exact: true }).fill('Wim de Tester');
+    await leider.pagina.getByRole('button', { name: 'Bewaar' }).click();
+    await leider.pagina.locator('.lid', { hasText: 'Wim de Tester' }).waitFor();
+    assert.equal(await leider.pagina.getByRole('button', { name: /Wijzig naam van Leider Lotte/ }).count(), 0, 'een groepsleider wijzigt geen namen van groepsleiders');
   });
 
   test('deelnemer opent de persoonlijke link en ziet direct waar en hoe laat', async () => {

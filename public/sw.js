@@ -4,7 +4,7 @@
 // geserveerd terwijl op de achtergrond een verse versie wordt opgehaald.
 // Reisgegevens lopen hier NIET doorheen: die bewaart de app zelf in IndexedDB,
 // zodat ze bij uitloggen of ingetrokken toegang gericht gewist kunnen worden.
-const VERSIE = 'v4';
+const VERSIE = 'v5';
 const OPSLAG = `mee-op-reis-${VERSIE}`;
 // Foto's van de reisleiding. Een foto verandert nooit, dus eenmaal bewaard is
 // altijd goed. De app wist deze opslag bij uitloggen en bij ingetrokken toegang.

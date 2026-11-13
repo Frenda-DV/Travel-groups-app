@@ -227,6 +227,25 @@ async function kopieer(tekst) {
   }
 }
 
+function NaamVenster({ lid, onKlaar, onSluit }) {
+  const [naam, setNaam] = useState(lid.naam);
+  const { bezig, fout, voerUit } = useActie();
+  async function bewaar(e) {
+    e.preventDefault();
+    if (await voerUit(() => api('PUT', `/api/leden/${lid.id}`, { naam }))) onKlaar();
+  }
+  return html`
+    <${Venster} titel="Naam wijzigen" onSluit=${onSluit}>
+      <form onSubmit=${bewaar}>
+        <p class="uitleg">${lid.email}</p>
+        <${Veld} label="Naam" waarde=${naam} zet=${setNaam} verplicht maxlength="120"
+          uitleg="Zo zien deelnemers deze persoon, bijvoorbeeld als afzender van een bericht. Eerder geplaatste berichten houden de oude naam." />
+        <${Melding}>${fout}<//>
+        <${Knoppen} bezig=${bezig} />
+      </form>
+    <//>`;
+}
+
 function Toevoegen({ reis, magLeiders, onKlaar, onSluit }) {
   const [tekst, setTekst] = useState('');
   const [rol, setRol] = useState('deelnemer');
@@ -337,8 +356,10 @@ export function Beheer({ reis, ververs, online, laadIk, ga }) {
   const actief = deelnemers.filter((l) => l.status === 'actief').length;
   const magLeiders = gegevens?.mag_groepsleiders_beheren;
 
+  const beheerders = gegevens?.beheerders || [];
   const rij = (lid) => {
     const magDit = lid.rol === 'deelnemer' || magLeiders;
+    const isBeheerder = lid.rol === 'beheerder';
     return html`
       <li class="lid">
         <div>
@@ -348,9 +369,10 @@ export function Beheer({ reis, ververs, online, laadIk, ga }) {
         </div>
         ${magDit && html`
           <div class="lid-knoppen">
-            <button class="knop klein tweede" disabled=${bezig} onClick=${() => nieuweLink(lid)} aria-label=${`Nieuwe link voor ${lid.naam}`}>Nieuwe link</button>
-            ${lid.status === 'actief' && html`<button class="knop klein gevaar" disabled=${bezig} onClick=${() => trekIn(lid)} aria-label=${`Toegang intrekken van ${lid.naam}`}>Intrekken</button>`}
-            ${(lid.status === 'uitgenodigd' || lid.status === 'verlopen') && html`<button class="knop klein gevaar" disabled=${bezig} onClick=${() => verwijder(lid)} aria-label=${`Verwijder ${lid.naam}`}>Verwijder</button>`}
+            <button class="knop klein tweede" disabled=${bezig} onClick=${() => setVenster({ naamVan: lid })} aria-label=${`Wijzig naam van ${lid.naam}`}>Wijzig naam</button>
+            ${!isBeheerder && html`<button class="knop klein tweede" disabled=${bezig} onClick=${() => nieuweLink(lid)} aria-label=${`Nieuwe link voor ${lid.naam}`}>Nieuwe link</button>`}
+            ${!isBeheerder && lid.status === 'actief' && html`<button class="knop klein gevaar" disabled=${bezig} onClick=${() => trekIn(lid)} aria-label=${`Toegang intrekken van ${lid.naam}`}>Intrekken</button>`}
+            ${!isBeheerder && (lid.status === 'uitgenodigd' || lid.status === 'verlopen') && html`<button class="knop klein gevaar" disabled=${bezig} onClick=${() => verwijder(lid)} aria-label=${`Verwijder ${lid.naam}`}>Verwijder</button>`}
           </div>`}
       </li>`;
   };
@@ -377,8 +399,15 @@ export function Beheer({ reis, ververs, online, laadIk, ga }) {
       <h3>Deelnemers</h3>
       ${deelnemers.length === 0
         ? html`<p class="leeg">Nog geen deelnemers uitgenodigd.</p>`
-        : html`<ul class="leden">${deelnemers.map(rij)}</ul>`}`}
+        : html`<ul class="leden">${deelnemers.map(rij)}</ul>`}
 
+      ${beheerders.length > 0 && html`
+        <h3>Beheerders van ${reis.organisatie}</h3>
+        <p class="uitleg">Beheerders zien alle reizen van de organisatie. Hun naam staat bij berichten die zij plaatsen.</p>
+        <ul class="leden">${beheerders.map(rij)}</ul>`}`}
+
+    ${venster?.naamVan && html`<${NaamVenster} lid=${venster.naamVan} onSluit=${() => setVenster(null)}
+        onKlaar=${() => { setVenster(null); laad(); ververs(); laadIk(); }} />`}
     ${venster === 'toevoegen' && html`<${Toevoegen} reis=${reis} magLeiders=${magLeiders} onSluit=${() => setVenster(null)}
         onKlaar=${(r) => { setVenster(null); setResultaat(r); laad(); }} />`}
     ${venster === 'reis' && html`<${ReisVenster} reis=${reis} onSluit=${() => setVenster(null)}

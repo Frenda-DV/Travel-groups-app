@@ -553,7 +553,11 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     const reis = await haalReisVoorBeheer(db, c.req.param('reisId'));
     const { rows } = await db.query(
       `select ${LID_KOLOMMEN} from lidmaatschappen where reis_id = $1 order by (rol = 'groepsleider') desc, naam`, [reis.id]);
-    return c.json({ leden: rows, mag_groepsleiders_beheren: reis.beheerder, mail_actief: mail.actief });
+    // Een beheerder ziet hier ook de beheerders van de organisatie, om hun naam te kunnen aanpassen.
+    const beheerders = reis.beheerder
+      ? (await db.query(`select ${LID_KOLOMMEN} from lidmaatschappen where org_id = $1 and reis_id is null order by naam`, [reis.org_id])).rows
+      : [];
+    return c.json({ leden: rows, beheerders, mag_groepsleiders_beheren: reis.beheerder, mail_actief: mail.actief });
   });
 
   app.post('/api/reizen/:reisId/leden', metSessie, async (c) => {
@@ -601,6 +605,16 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     if (!rows[0]) throw new Fout(404, 'Niet gevonden.');
     return rows[0];
   }
+
+  // De naam is wat deelnemers zien, bijvoorbeeld als afzender van een bericht.
+  app.put('/api/leden/:id', metSessie, async (c) => {
+    const db = c.get('db');
+    const lid = await haalLid(db, c.req.param('id'));
+    const naam = tekst((await invoer(c)).naam, 'De naam', { max: 120, verplicht: true });
+    const { rows } = await db.query('update lidmaatschappen set naam = $2 where id = $1 returning id', [lid.id, naam]);
+    if (!rows[0]) throw new Fout(403, 'Je kunt de naam van deze persoon niet wijzigen.');
+    return c.json({ ok: true });
+  });
 
   app.post('/api/leden/:id/nieuwe-link', metSessie, async (c) => {
     const db = c.get('db');
