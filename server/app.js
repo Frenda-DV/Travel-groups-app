@@ -115,7 +115,19 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     if (veilig) c.header('Strict-Transport-Security', 'max-age=31536000');
   });
 
-  app.get('/api/gezondheid', (c) => c.json({ ok: true }));
+  // Statuscontrole voor beheer: werkt de app en kan hij bij de database?
+  // Bij een fout komt alleen een korte code naar buiten; de details staan in de serverlog.
+  app.get('/api/gezondheid', async (c) => {
+    try {
+      if (gereed) await gereed;
+      await pool.query('select 1');
+      return c.json({ ok: true, database: 'ok' });
+    } catch (fout) {
+      console.error('Database niet bereikbaar:', fout);
+      const code = fout.code || (/Onveilige databaseverbinding/.test(fout.message) ? 'rolcontrole' : /Geen database/.test(fout.message) ? 'niet-ingesteld' : 'onbekend');
+      return c.json({ ok: false, database: `fout: ${code}` }, 503);
+    }
+  });
 
   // Elke API-aanvraag draait in één transactie. De sessie wordt in de database
   // gezet; vanaf dat punt bepaalt row-level security wat zichtbaar is.

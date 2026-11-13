@@ -1,6 +1,6 @@
 // Mee op Reis: start van de app, inloggen en het overzicht van je reizen.
 import { html, render, useCallback, useEffect, useState } from './vendor/preact-htm.js';
-import { api, GeenVerbinding } from './api.js';
+import { api, GeenVerbinding, ServerStoring } from './api.js';
 import { lees, bewaar, sleutels, verwijder, wisAlles } from './opslag.js';
 import { periode } from './hulp.js';
 import { Melding, Sfeerbeeld, Veld, useActie } from './onderdelen.js';
@@ -51,7 +51,7 @@ function App() {
     } catch (e) {
       if (!(e instanceof GeenVerbinding)) throw e;
       const bewaard = localStorage.getItem(UITGESTELD) ? null : await lees('ik');
-      setOffline(true);
+      setOffline(e instanceof ServerStoring ? 'storing' : true);
       setIk(bewaard || null);
       return bewaard || null;
     }
@@ -249,7 +249,9 @@ function Inloggen({ offline, ga, laadIk }) {
   return html`
     <${Entree}>
       <h1>Inloggen</h1>
-      ${offline && html`<p class="status offline" role="status"><strong>Geen verbinding.</strong> Inloggen kan alleen als je internet hebt.</p>`}
+      ${offline && html`<p class="status offline" role="status">${offline === 'storing'
+        ? html`<strong>De app heeft even een storing.</strong> Probeer het over een paar minuten opnieuw.`
+        : html`<strong>Geen verbinding.</strong> Inloggen kan alleen als je internet hebt.`}</p>`}
       ${stap === 'email' ? html`
         <p>Heb je een uitnodiging gekregen? Open dan de link uit die uitnodiging. Gebruikte je de app al eerder, vul dan hier je e-mailadres in.</p>
         <form onSubmit=${vraagAan}>

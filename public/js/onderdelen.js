@@ -1,6 +1,6 @@
 // Kleine bouwstenen die op meerdere schermen terugkomen.
 import { html, useEffect, useRef, useState } from './vendor/preact-htm.js';
-import { GeenVerbinding } from './api.js';
+import { GeenVerbinding, ServerStoring } from './api.js';
 
 const PADEN = {
   programma: 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 13h3M8 16h6',
@@ -81,7 +81,9 @@ export function useActie() {
       return antwoord ?? true;
     } catch (e) {
       if (!(e instanceof GeenVerbinding)) throw e;
-      setFout('Geen verbinding. Wijzigen kan alleen als je internet hebt. Probeer het zo opnieuw.');
+      setFout(e instanceof ServerStoring
+        ? 'De app heeft even een storing. Probeer het over een paar minuten opnieuw.'
+        : 'Geen verbinding. Dit kan alleen als je internet hebt. Probeer het zo opnieuw.');
       return null;
     } finally {
       setBezig(false);
