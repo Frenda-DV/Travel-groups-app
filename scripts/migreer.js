@@ -11,6 +11,15 @@ export async function migreer(adminUrl, { appWachtwoord, stil = false } = {}) {
   const client = new pg.Client({ connectionString: adminUrl });
   await client.connect();
   try {
+    // Mee op Reis hoort in een eigen database. Staan er al tabellen van iets
+    // anders, dan wordt er niets aangeraakt: de inrichting past rechten op het
+    // hele schema aan en de app weigert te draaien naast onafgeschermde tabellen.
+    const { rows: bestaand } = await client.query(`
+      select to_regclass('public.schema_migraties') is not null as ingericht,
+             (select coalesce(string_agg(tablename, ', ' order by tablename), '') from pg_tables where schemaname = 'public') as tabellen`);
+    if (!bestaand[0].ingericht && bestaand[0].tabellen) {
+      throw new Error(`Deze database is niet leeg (tabellen: ${bestaand[0].tabellen}). Gebruik voor Mee op Reis een eigen, lege database.`);
+    }
     await client.query(`create table if not exists schema_migraties (
       bestand text primary key, uitgevoerd_op timestamptz not null default now())`);
     const klaar = new Set((await client.query('select bestand from schema_migraties')).rows.map((r) => r.bestand));
