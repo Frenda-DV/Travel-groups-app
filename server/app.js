@@ -124,8 +124,8 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
       return c.json({ ok: true, database: 'ok' });
     } catch (fout) {
       console.error('Database niet bereikbaar:', fout);
-      const code = fout.code || (/Onveilige databaseverbinding/.test(fout.message) ? 'rolcontrole' : /Geen database/.test(fout.message) ? 'niet-ingesteld' : 'onbekend');
-      return c.json({ ok: false, database: `fout: ${code}` }, 503);
+      const code = fout.code || (/Geen database/.test(fout.message) ? 'niet-ingesteld' : 'onbekend');
+      return c.json({ ok: false, database: `fout: ${code}${fout.kort ? ` (${fout.kort})` : ''}` }, 503);
     }
   });
 
