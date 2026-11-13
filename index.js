@@ -25,6 +25,7 @@ const app = maakApp({
   vertrouwProxy: true,
   veilig: true,
   gereed,
+  enigeHost: process.env.VERCEL_ENV === 'production' && publiekAdres() ? new URL(publiekAdres()).host : '',
 });
 
 if (!(app instanceof Hono)) throw new Error('maakApp hoort een Hono-app terug te geven.');

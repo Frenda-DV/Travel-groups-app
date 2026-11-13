@@ -54,3 +54,13 @@ test('databaseadressen: beperkte rol wordt ingevuld en tls staat strikt', () => 
   assert.equal(urls.app, 'postgres://reisapp_app:app-wachtwoord@db.voorbeeld.test/reis?sslmode=verify-full');
   assert.equal(urls.admin, 'postgres://eigenaar:geheim@direct.voorbeeld.test/reis?sslmode=verify-full');
 });
+
+test('een bezoek via een oud build-adres wordt doorgestuurd naar het echte adres', async () => {
+  const { maakApp } = await import('../server/app.js');
+  const app = maakApp({ pool: null, mail: { actief: false }, basisUrl: 'https://reis.voorbeeld.test', enigeHost: 'reis.voorbeeld.test' });
+  const oud = await app.fetch(new Request('https://reis-abc123-projects.voorbeeld.app/u/geheim?x=1', { headers: { host: 'reis-abc123-projects.voorbeeld.app' } }));
+  assert.equal(oud.status, 307);
+  assert.equal(oud.headers.get('location'), 'https://reis.voorbeeld.test/u/geheim?x=1');
+  const goed = await app.fetch(new Request('https://reis.voorbeeld.test/inloggen', { headers: { host: 'reis.voorbeeld.test' } }));
+  assert.equal(goed.status, 200, 'het echte adres toont gewoon de app');
+});

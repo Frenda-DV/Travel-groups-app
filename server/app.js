@@ -87,8 +87,22 @@ async function invoer(c) {
 //   adres waarop de aanvraag binnenkwam.
 // gereed: een functie die een belofte geeft; die moet slagen (de controle op
 //   de databaserol) voordat er ook maar één aanvraag bij de database komt.
-export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veilig = basisUrl.startsWith('https://'), gereed = null }) {
+// enigeHost: als dit is ingevuld, wordt elk bezoek via een ander adres
+//   doorgestuurd. Op Vercel heeft elke build een eigen, vast adres dat altijd
+//   die oude versie blijft tonen; daar mag niemand per ongeluk blijven hangen.
+export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veilig = basisUrl.startsWith('https://'), gereed = null, enigeHost = '' }) {
   const app = new Hono();
+
+  if (enigeHost) {
+    app.use('*', async (c, next) => {
+      const host = c.req.header('host');
+      const url = new URL(c.req.url);
+      if (host && host !== enigeHost && c.req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+        return c.redirect(`https://${enigeHost}${url.pathname}${url.search}`, 307);
+      }
+      await next();
+    });
+  }
   const adresVan = (c) => basisUrl || new URL(c.req.url).origin;
   const COOKIE = veilig ? '__Host-sessie' : 'sessie';
   const teVaak = maakLimiet();
