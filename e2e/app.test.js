@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { verseDatabase, zaai, startServer, maakVrager } from '../test/hulp.js';
+import { verseDatabase, zaai, startServer, maakVrager, TESTFOTO } from '../test/hulp.js';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
@@ -84,6 +84,14 @@ const opslagInhoud = (pagina) => pagina.evaluate(() => new Promise((klaar) => {
   verzoek.onerror = () => klaar({ sleutels: [], tekst: '' });
 }));
 const schermTekst = (pagina) => pagina.locator('body').innerText();
+const testfoto = { name: 'foto.jpg', mimeType: 'image/jpeg', buffer: TESTFOTO };
+// Is deze foto echt geladen (en niet alleen een leeg kader)?
+const fotoGeladen = (locator) => locator.evaluate((img) => img.complete && img.naturalWidth > 0);
+const wachtOpFoto = async (locator) => {
+  await locator.waitFor();
+  await locator.evaluate((img) => img.complete || new Promise((klaar) => { img.onload = klaar; img.onerror = klaar; }));
+  return fotoGeladen(locator);
+};
 
 // ===========================================================================
 describe('Deelnemer en groepsleider, op de eerste ochtend van de reis', () => {
@@ -120,6 +128,7 @@ describe('Deelnemer en groepsleider, op de eerste ochtend van de reis', () => {
     assert.match(tekst, /begint om 09:15/);
     assert.match(tekst, /Bij de loopplank, gids met rode paraplu/);
     assert.match(await deelnemer.pagina.locator('.dag-kop').innerText(), /maandag 10 mei \(vandaag\)/i);
+    assert.equal(await wachtOpFoto(deelnemer.pagina.locator('.onderdeel img.foto').first()), true, 'foto van het verzamelpunt is zichtbaar');
     await foto(deelnemer.pagina, 'deelnemer-programma');
 
     // Geen beheerfuncties voor een deelnemer.
@@ -141,6 +150,7 @@ describe('Deelnemer en groepsleider, op de eerste ochtend van de reis', () => {
     for (const verwacht of ['09:15', 'tot 12:30', 'Aanwezig om 09:00', 'Bij de loopplank, gids met rode paraplu #A1#', '14:00', 'Aanwezig om 13:45', 'Receptie dek 3 #A1#']) {
       assert.ok(dag1.includes(verwacht), `offline ontbreekt: ${verwacht}`);
     }
+    assert.equal(await wachtOpFoto(pagina.locator('.onderdeel img.foto').first()), true, 'de foto van het verzamelpunt is ook offline te zien');
     await foto(pagina, 'deelnemer-offline');
 
     await pagina.getByRole('button', { name: /11 mei/ }).click();
@@ -178,8 +188,17 @@ describe('Deelnemer en groepsleider, op de eerste ochtend van de reis', () => {
     await pagina.getByRole('button', { name: 'Haal uit programma' }).click();
     await pagina.getByRole('button', { name: 'Wijzig Excursie museum #A1#' }).waitFor({ state: 'detached' });
 
+    // Een eigen foto bij de dag.
+    await pagina.getByRole('button', { name: 'Dag wijzigen' }).click();
+    await pagina.locator('dialog[open] input[type="file"]').setInputFiles(testfoto);
+    await pagina.locator('dialog[open] .foto-voorbeeld').waitFor();
+    await pagina.getByRole('button', { name: 'Bewaar' }).click();
+    assert.equal(await wachtOpFoto(pagina.locator('.dag-kop img.foto')), true, 'de groepsleider ziet de dagfoto');
+
     await pagina.getByRole('link', { name: /Berichten/ }).click();
     await pagina.getByLabel('Nieuw bericht aan de groep').fill('De bus vertrekt een kwartier eerder #A1#');
+    await pagina.locator('.berichtformulier input[type="file"]').setInputFiles(testfoto);
+    await pagina.locator('.berichtformulier .foto-voorbeeld').waitFor();
     await pagina.getByLabel(/Belangrijk/).check();
     await pagina.getByRole('button', { name: 'Plaats bericht' }).click();
     await pagina.getByText('Je bericht is geplaatst.').waitFor();
@@ -204,10 +223,12 @@ describe('Deelnemer en groepsleider, op de eerste ochtend van de reis', () => {
     assert.match(await pagina.locator('.tabs .teller').innerText(), /^1/);
     await foto(pagina, 'deelnemer-gewijzigd');
 
+    assert.equal(await wachtOpFoto(pagina.locator('.dag-kop img.foto')), true, 'de deelnemer ziet de nieuwe dagfoto');
     await balk.getByRole('button', { name: 'Begrepen' }).click();
     await balk.waitFor({ state: 'detached' });
     await pagina.locator('.belangrijk-balk').click();
     await pagina.getByText('De bus vertrekt een kwartier eerder').waitFor();
+    assert.equal(await wachtOpFoto(pagina.locator('.bericht img.foto').first()), true, 'de deelnemer ziet de foto bij het bericht');
     await pagina.getByRole('link', { name: /Programma/ }).click();
     assert.equal(await pagina.locator('.belangrijk-balk').count(), 0, 'gelezen bericht staat niet meer boven het programma');
     assert.deepEqual(deelnemer.fouten, [], 'geen scriptfouten bij de deelnemer');
@@ -244,6 +265,7 @@ describe('Twee organisaties op één toestel', () => {
     await toestel.pagina.getByRole('button', { name: 'Uitloggen' }).click();
     await toestel.pagina.getByRole('heading', { name: 'Inloggen' }).waitFor();
     assert.deepEqual((await opslagInhoud(toestel.pagina)).sleutels, [], 'opslag is leeg na uitloggen');
+    assert.equal(await toestel.pagina.evaluate(() => caches.has('mee-op-reis-fotos')), false, "ook de foto's zijn van het toestel gewist");
 
     await toestel.context.setOffline(true);
     await toestel.pagina.goto(reisPad('A1'));
@@ -344,6 +366,31 @@ describe('Beheerder: meerdere reizen en groepsleiders', () => {
     await leider.pagina.locator('.onderdeel', { hasText: 'Welkomstborrel' }).waitFor();
     assert.match(await leider.pagina.locator('.onderdeel').innerText(), /17:00[\s\S]*Aanwezig om 16:50[\s\S]*Lobby van het hotel/);
     await foto(leider.pagina, 'leider-telefoon');
+
+    // Eigen omslagfoto, daarna afsluiten en definitief verwijderen.
+    await beheerder.pagina.getByRole('button', { name: 'Klaar' }).click();
+    await beheerder.pagina.getByRole('button', { name: 'Reisgegevens wijzigen' }).click();
+    await beheerder.pagina.locator('dialog[open] input[type="file"]').setInputFiles(testfoto);
+    await beheerder.pagina.locator('dialog[open] .foto-voorbeeld').waitFor();
+    await beheerder.pagina.getByRole('button', { name: 'Bewaar' }).click();
+    await beheerder.pagina.locator('.kop img[src^="/api/afbeeldingen/"]').waitFor();
+    assert.equal(await wachtOpFoto(beheerder.pagina.locator('.kop img')), true, 'de eigen omslagfoto staat in de kop');
+
+    await beheerder.pagina.getByRole('button', { name: 'Reisgegevens wijzigen' }).click();
+    assert.equal(await beheerder.pagina.getByRole('button', { name: 'Reis definitief verwijderen' }).count(), 0, 'verwijderen kan pas na afsluiten');
+    await beheerder.pagina.getByLabel(/Reis afsluiten/).check();
+    await beheerder.pagina.getByRole('button', { name: 'Bewaar' }).click();
+    await beheerder.pagina.locator('dialog[open]').waitFor({ state: 'detached' });
+    await leider.pagina.reload();
+    await leider.pagina.getByRole('heading', { name: 'Geen toegang' }).waitFor();
+
+    await beheerder.pagina.getByRole('button', { name: 'Reisgegevens wijzigen' }).click();
+    await beheerder.pagina.getByRole('button', { name: 'Reis definitief verwijderen' }).click();
+    await beheerder.pagina.getByRole('heading', { name: 'Mijn reizen' }).waitFor();
+    assert.ok(!(await schermTekst(beheerder.pagina)).includes('Lofoten voorjaar'), 'de reis staat niet meer in de lijst');
+    const over = await admin.query(`select (select count(*) from reizen where titel like 'Lofoten%')::int as reizen,
+      (select count(*) from afbeeldingen a where not exists (select 1 from reizen r where r.id = a.reis_id))::int as losse_fotos`);
+    assert.deepEqual(over.rows[0], { reizen: 0, losse_fotos: 0 }, "reis en foto's zijn uit de database");
     assert.deepEqual([...beheerder.fouten, ...leider.fouten], []);
     await beheerder.context.close();
     await leider.context.close();

@@ -38,6 +38,9 @@ export async function verseDatabase(naam = 'reisapp_test') {
   return { admin, app };
 }
 
+// Een klein maar echt jpg-plaatje (48 x 32 pixels) om foto's mee te testen.
+export const TESTFOTO = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAAgADADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDyuiiveqWLxf1bl929xUKHtr62seC0V71RXD/a/wDc/H/gHT9Q/vfh/wAE8For3qvFNe/5GHUv+vuX/wBDNdmExv1iTXLa3mc9fD+ySd7lCveq8Fq//b2s/wDQWvv/AAJf/GjG4SWI5bO1rhh66pXutz2uivFP7e1n/oLX3/gS/wDjR/b2s/8AQWvv/Al/8a4P7Jn/ADI6vr0ex7XXimvf8jDqX/X3L/6GaP7e1n/oLX3/AIEv/jVKSR5ZGkkdndyWZmOSxPUk124PByw8m273OfEYhVUkkf/Z', 'base64');
+
 export const REIZEN = ['A1', 'A2', 'B1', 'B2'];
 export const orgVan = (reis) => reis[0];
 
@@ -65,7 +68,7 @@ export const PERSONAS = {
 
 export async function zaai(admin) {
   const q = (sql, p) => admin.query(sql, p).then((r) => r.rows);
-  const ids = { org: {}, reis: {}, lid: {}, dag: {}, onderdeel: {}, info: {}, bericht: {} };
+  const ids = { org: {}, reis: {}, lid: {}, dag: {}, onderdeel: {}, info: {}, bericht: {}, foto: {} };
   const tokens = {};
 
   const orgNamen = { A: 'Zonnevaart Reizen #A#', B: 'Noorderlicht Tours #B#' };
@@ -95,6 +98,11 @@ export async function zaai(admin) {
           [ids.org[orgVan(r)], ids.reis[r], dag, o[0], o[1], o[2], o[3], o[4], `Omschrijving #${r}#`, `Regenjas #${r}#`, o[5]]))[0].id;
       }
     }
+    // Eén foto per reis, gekoppeld aan het eerste onderdeel (het verzamelpunt).
+    ids.foto[r] = (await q(
+      `insert into afbeeldingen (org_id, reis_id, soort, gegevens) values ($1, $2, 'image/jpeg', $3) returning id`,
+      [ids.org[orgVan(r)], ids.reis[r], TESTFOTO]))[0].id;
+    await q('update programma_onderdelen set afbeelding_id = $1 where id = $2', [ids.foto[r], ids.onderdeel[`${r}.1.1`]]);
     ids.info[r] = (await q(
       `insert into info_blokken (org_id, reis_id, titel, tekst) values ($1, $2, $3, $4) returning id`,
       [ids.org[orgVan(r)], ids.reis[r], `Noodnummer #${r}#`, `Bel de reisleiding op 06 00000000 #${r}#`]))[0].id;
@@ -182,12 +190,13 @@ export function maakVrager(url, tokens) {
     const headers = { ...extraHeaders };
     const token = typeof persona === 'string' ? tokens[persona] : persona?.cookie;
     if (token) headers.cookie = `sessie=${token}`;
-    if (body !== undefined) headers['content-type'] = 'application/json';
-    const antwoord = await fetch(url + pad, { method: methode, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const rauw = Buffer.isBuffer(body);
+    if (body !== undefined) headers['content-type'] = rauw ? 'image/jpeg' : 'application/json';
+    const antwoord = await fetch(url + pad, { method: methode, headers, body: body === undefined ? undefined : rauw ? body : JSON.stringify(body) });
     const tekst = await antwoord.text();
     let json = null;
     try { json = JSON.parse(tekst); } catch { /* geen JSON */ }
     const cookie = (antwoord.headers.get('set-cookie') || '').match(/sessie=([^;]+)/)?.[1] || null;
-    return { status: antwoord.status, tekst, json, cookie };
+    return { status: antwoord.status, tekst, json, cookie, soort: antwoord.headers.get('content-type') };
   };
 }

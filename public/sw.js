@@ -4,8 +4,11 @@
 // geserveerd terwijl op de achtergrond een verse versie wordt opgehaald.
 // Reisgegevens lopen hier NIET doorheen: die bewaart de app zelf in IndexedDB,
 // zodat ze bij uitloggen of ingetrokken toegang gericht gewist kunnen worden.
-const VERSIE = 'v3';
+const VERSIE = 'v4';
 const OPSLAG = `mee-op-reis-${VERSIE}`;
+// Foto's van de reisleiding. Een foto verandert nooit, dus eenmaal bewaard is
+// altijd goed. De app wist deze opslag bij uitloggen en bij ingetrokken toegang.
+const FOTO_OPSLAG = 'mee-op-reis-fotos';
 const APP_BESTANDEN = [
   '/index.html',
   '/css/app.css',
@@ -43,7 +46,7 @@ self.addEventListener('install', (gebeurtenis) => {
 self.addEventListener('activate', (gebeurtenis) => {
   gebeurtenis.waitUntil(
     caches.keys()
-      .then((namen) => Promise.all(namen.filter((n) => n !== OPSLAG).map((n) => caches.delete(n))))
+      .then((namen) => Promise.all(namen.filter((n) => n !== OPSLAG && n !== FOTO_OPSLAG).map((n) => caches.delete(n))))
       .then(() => self.clients.claim()),
   );
 });
@@ -64,10 +67,24 @@ async function uitOpslagEnVerversen(gebeurtenis, sleutel) {
   return (await vers) || new Response('Geen verbinding.', { status: 503, headers: { 'content-type': 'text/plain; charset=utf-8' } });
 }
 
+async function fotoUitOpslag(verzoek, pad) {
+  const opslag = await caches.open(FOTO_OPSLAG);
+  const bewaard = await opslag.match(pad);
+  if (bewaard) return bewaard;
+  const antwoord = await fetch(verzoek);
+  if (antwoord.ok) opslag.put(pad, antwoord.clone());
+  return antwoord;
+}
+
 self.addEventListener('fetch', (gebeurtenis) => {
   const verzoek = gebeurtenis.request;
   const url = new URL(verzoek.url);
-  if (verzoek.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  if (verzoek.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/afbeeldingen/')) {
+    gebeurtenis.respondWith(fotoUitOpslag(verzoek, url.pathname));
+    return;
+  }
+  if (url.pathname.startsWith('/api/')) return;
   // Elke schermadres (bijvoorbeeld /reis/…/programma) wordt door dezelfde app getoond.
   const sleutel = verzoek.mode === 'navigate' ? '/index.html' : url.pathname;
   gebeurtenis.respondWith(uitOpslagEnVerversen(gebeurtenis, sleutel));

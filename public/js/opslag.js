@@ -29,8 +29,28 @@ export const lees = (sleutel) => transactie('readonly', (s) => s.get(sleutel)).c
 export const bewaar = (sleutel, waarde) => transactie('readwrite', (s) => s.put(waarde, sleutel)).then(() => true, () => false);
 export const verwijder = (sleutel) => transactie('readwrite', (s) => s.delete(sleutel)).catch(() => {});
 export const sleutels = () => transactie('readonly', (s) => s.getAllKeys()).catch(() => []);
-export const wisAlles = () => transactie('readwrite', (s) => s.clear()).catch(() => {});
+// Foto's van de reisleiding staan in een eigen opslag van de browser (zie sw.js).
+export const FOTO_OPSLAG = 'mee-op-reis-fotos';
+const wisFotos = () => (globalThis.caches ? caches.delete(FOTO_OPSLAG).catch(() => {}) : Promise.resolve());
+
+export async function wisAlles() {
+  await transactie('readwrite', (s) => s.clear()).catch(() => {});
+  await wisFotos();
+}
+
+// Zet de foto's van een reis op het toestel, zodat ze ook zonder internet te zien zijn.
+export async function bewaarFotos(ids) {
+  if (!globalThis.caches || !ids.length) return;
+  try {
+    const opslag = await caches.open(FOTO_OPSLAG);
+    for (const id of ids) {
+      const adres = `/api/afbeeldingen/${id}`;
+      if (!(await opslag.match(adres))) await opslag.add(adres).catch(() => {});
+    }
+  } catch { /* geen opslag beschikbaar: de foto's werken dan alleen met internet */ }
+}
 
 export async function wisReis(reisId) {
   for (const soort of ['bundel', 'merken', 'gelezen', 'notitie']) await verwijder(`${soort}:${reisId}`);
+  await wisFotos(); // foto's van andere reizen worden bij het volgende bezoek opnieuw opgehaald
 }

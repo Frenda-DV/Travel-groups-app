@@ -10,7 +10,7 @@
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  verseDatabase, zaai, startServer, maakVrager, PERSONAS, REIZEN, orgVan, vreemdeMerken,
+  verseDatabase, zaai, startServer, maakVrager, PERSONAS, REIZEN, orgVan, vreemdeMerken, TESTFOTO,
 } from './hulp.js';
 
 let admin, app, zaad, server, vraag;
@@ -71,7 +71,7 @@ describe('1. Database: row-level security, vragen zonder filter', () => {
         const kolom = async (sql) => (await db.query(sql)).rows.map((r) => Object.values(r)[0]);
         assert.deepEqual(sorteer(await kolom('select id from reizen')), verwachteReizen, 'reizen');
         assert.deepEqual(sorteer(await kolom('select id from organisaties')), verwachteOrgs, 'organisaties');
-        for (const [tabel, perReis] of [['programma_dagen', 2], ['programma_onderdelen', 4], ['info_blokken', 1], ['berichten', 2]]) {
+        for (const [tabel, perReis] of [['programma_dagen', 2], ['programma_onderdelen', 4], ['info_blokken', 1], ['berichten', 2], ['afbeeldingen', 1]]) {
           const rijen = await kolom(`select reis_id from ${tabel}`);
           assert.deepEqual(sorteer([...new Set(rijen)]), verwachteReizen, `${tabel}: reizen`);
           assert.equal(rijen.length, verwachteReizen.length * perReis, `${tabel}: aantal rijen`);
@@ -106,6 +106,9 @@ describe('1. Database: row-level security, vragen zonder filter', () => {
     ['onderdeel toevoegen', 'beheren', (r) => [`insert into programma_onderdelen (org_id, reis_id, dag_id, titel) values ($1, $2, $3, 'x')`, [zaad.ids.org[orgVan(r)], zaad.ids.reis[r], zaad.ids.dag[`${r}.1`]]]],
     ['onderdeel wijzigen', 'beheren', (r) => [`update programma_onderdelen set verzamelpunt = 'gekaapt' where reis_id = $1`, [zaad.ids.reis[r]]]],
     ['onderdeel verwijderen', 'beheren', (r) => ['delete from programma_onderdelen where reis_id = $1', [zaad.ids.reis[r]]]],
+    ['foto toevoegen', 'beheren', (r) => [`insert into afbeeldingen (org_id, reis_id, soort, gegevens) values ($1, $2, 'image/jpeg', $3)`, [zaad.ids.org[orgVan(r)], zaad.ids.reis[r], TESTFOTO]]],
+    ['foto verwijderen', 'beheren', (r) => ['delete from afbeeldingen where reis_id = $1', [zaad.ids.reis[r]]]],
+    ['foto aan onderdeel koppelen', 'beheren', (r) => ['update programma_onderdelen set afbeelding_id = $2 where reis_id = $1', [zaad.ids.reis[r], zaad.ids.foto[r]]]],
     ['info toevoegen', 'beheren', (r) => [`insert into info_blokken (org_id, reis_id, titel) values ($1, $2, 'x')`, [zaad.ids.org[orgVan(r)], zaad.ids.reis[r]]]],
     ['info wijzigen', 'beheren', (r) => [`update info_blokken set tekst = 'gekaapt' where reis_id = $1`, [zaad.ids.reis[r]]]],
     ['info verwijderen', 'beheren', (r) => ['delete from info_blokken where reis_id = $1', [zaad.ids.reis[r]]]],
@@ -143,8 +146,9 @@ describe('1. Database: row-level security, vragen zonder filter', () => {
       `update lidmaatschappen set rol = 'groepsleider'`, 'update lidmaatschappen set ingetrokken_op = null',
       'update lidmaatschappen set reis_id = null', `update lidmaatschappen set uitnodiging_hash = 'x'`,
       `update lidmaatschappen set email = 'x@x.test'`,
-      `insert into organisaties (naam) values ('x')`, `update organisaties set naam = 'x'`, 'delete from reizen',
+      `insert into organisaties (naam) values ('x')`, `update organisaties set naam = 'x'`,
       `update berichten set tekst = 'x'`, `update programma_onderdelen set reis_id = '${zaad.ids.reis.A1}'`,
+      `update afbeeldingen set soort = 'image/png'`, `update afbeeldingen set reis_id = '${zaad.ids.reis.A1}'`,
       `update programma_dagen set org_id = '${zaad.ids.org.A}'`,
     ];
     for (const persona of ['beheerderA', 'leiderB1', 'anna', 'anoniem']) {
@@ -167,6 +171,12 @@ describe('1. Database: row-level security, vragen zonder filter', () => {
         [`insert into programma_onderdelen (org_id, reis_id, dag_id, titel) values ($1, $2, $3, 'x')`, [org.A, reis.A1, dag['B1.1']]],
         [`insert into lidmaatschappen (org_id, reis_id, rol, email, naam) values ($1, $2, 'groepsleider', 'x@x.test', 'x')`, [org.A, reis.B1]],
         [`insert into lidmaatschappen (org_id, rol, email, naam) values ($1, 'beheerder', 'x@x.test', 'x')`, [org.B]],
+        // een reis die niet is afgesloten kan niemand verwijderen, ook de beheerder niet
+        ['delete from reizen', []],
+        // een foto van een andere reis (zelfs binnen de eigen organisatie) is niet te koppelen
+        ['update programma_onderdelen set afbeelding_id = $1 where reis_id = $2', [zaad.ids.foto.A2, reis.A1]],
+        ['update programma_onderdelen set afbeelding_id = $1 where reis_id = $2', [zaad.ids.foto.B1, reis.A1]],
+        ['update reizen set omslag_afbeelding_id = $1 where id = $2', [zaad.ids.foto.B1, reis.A1]],
       ]) assert.equal(await lukt(db, sql, params), false, sql);
     });
   });
@@ -196,6 +206,25 @@ describe('2. API: elke persoon x elke reis x elke actie', () => {
   // [naam, benodigd recht, voorbereiding -> { methode, pad, body, effect() }]
   const acties = [
     ['programma, info en berichten ophalen', 'lezen', async (r) => ({ methode: 'GET', pad: `/api/reizen/${zaad.ids.reis[r]}/bundel` })],
+    ['foto van de reisleiding bekijken', 'lezen', async (r) => ({ methode: 'GET', pad: `/api/afbeeldingen/${zaad.ids.foto[r]}`, binair: true })],
+    ['foto toevoegen', 'beheren', async (r) => {
+      const voor = (await q('select count(*)::int as n from afbeeldingen where reis_id = $1', [zaad.ids.reis[r]]))[0].n;
+      return { methode: 'POST', pad: `/api/reizen/${zaad.ids.reis[r]}/afbeeldingen`, body: TESTFOTO,
+        effect: async () => (await q('select count(*)::int as n from afbeeldingen where reis_id = $1', [zaad.ids.reis[r]]))[0].n === voor + 1,
+        opruimen: () => q('delete from afbeeldingen where reis_id = $1 and id <> $2', [zaad.ids.reis[r], zaad.ids.foto[r]]) };
+    }],
+    ['foto verwijderen', 'beheren', async (r) => {
+      const id = (await q(`insert into afbeeldingen (org_id, reis_id, soort, gegevens) values ($1, $2, 'image/jpeg', $3) returning id`, [o(r), zaad.ids.reis[r], TESTFOTO]))[0].id;
+      return { methode: 'DELETE', pad: `/api/afbeeldingen/${id}`, effect: async () => !(await bestaat('afbeeldingen', id)),
+        opruimen: () => q('delete from afbeeldingen where id = $1', [id]) };
+    }],
+    ['afgesloten reis definitief verwijderen', 'beheerder', async (r) => {
+      const id = (await q(
+        `insert into reizen (org_id, titel, start_datum, eind_datum, gearchiveerd) values ($1, $2, '2028-06-01', '2028-06-02', true) returning id`,
+        [o(r), `Afgesloten #${orgVan(r)}#`]))[0].id;
+      return { methode: 'DELETE', pad: `/api/reizen/${id}`, effect: async () => !(await bestaat('reizen', id)),
+        opruimen: () => q('delete from reizen where id = $1', [id]) };
+    }],
     ['deelnemerslijst bekijken', 'beheren', async (r) => ({ methode: 'GET', pad: `/api/reizen/${zaad.ids.reis[r]}/leden` })],
     ['deelnemerslijst exporteren (csv)', 'beheren', async (r) => ({ methode: 'GET', pad: `/api/reizen/${zaad.ids.reis[r]}/deelnemers.csv` })],
     ['dag toevoegen', 'beheren', async (r) => {
@@ -307,7 +336,8 @@ describe('2. API: elke persoon x elke reis x elke actie', () => {
           aantal += 1;
           if (mag) {
             assert.ok([200, 201].includes(antwoord.status), `${wat}: verwacht toegestaan, kreeg ${antwoord.status} ${antwoord.tekst.slice(0, 120)}`);
-            if (actie.methode === 'GET') assert.ok(antwoord.tekst.includes(merk(reis)), `${wat}: antwoord bevat de eigen reis niet`);
+            if (actie.binair) assert.equal(antwoord.soort, 'image/jpeg', `${wat}: geen foto teruggekregen`);
+            else if (actie.methode === 'GET') assert.ok(antwoord.tekst.includes(merk(reis)), `${wat}: antwoord bevat de eigen reis niet`);
           } else if (zonderSessie) {
             assert.equal(antwoord.status, 401, `${wat}: zonder geldige sessie hoort 401`);
           } else {
@@ -492,6 +522,32 @@ describe('3. Uitnodigen, inloggen en intrekken', () => {
     assert.ok(csv.tekst.includes(`"'=HYPERLINK(""http://kwaad"")"`), 'formule is voorzien van een apostrof');
     assert.deepEqual(vreemdeMerken(csv.tekst, 'leiderA1'), []);
     assert.ok(!csv.tekst.includes('cor@a2.test'));
+  });
+
+  test("foto's: alleen echte foto's, niet te groot, en opgeruimd als ze nergens meer bij horen", async () => {
+    const reis = zaad.ids.reis.B1;
+    const tel = async () => (await q('select count(*)::int as n from afbeeldingen where reis_id = $1', [reis]))[0].n;
+    const voor = await tel();
+    assert.equal((await vraag('leiderB1', 'POST', `/api/reizen/${reis}/afbeeldingen`, Buffer.from('<script>alert(1)</script>'.repeat(5)))).status, 400, 'geen foto');
+    assert.equal((await vraag('leiderB1', 'POST', `/api/reizen/${reis}/afbeeldingen`, Buffer.concat([TESTFOTO, Buffer.alloc(700000)]))).status, 413, 'te groot');
+    assert.equal(await tel(), voor);
+
+    const foto = (await vraag('leiderB1', 'POST', `/api/reizen/${reis}/afbeeldingen`, TESTFOTO)).json.id;
+    const bericht = await vraag('leiderB1', 'POST', `/api/reizen/${reis}/berichten`, { tekst: 'Zo ziet het trefpunt eruit #B1#', afbeelding_id: foto });
+    assert.equal(bericht.status, 201);
+    const bundel = await vraag('eva', 'GET', `/api/reizen/${reis}/bundel`);
+    assert.equal(bundel.json.berichten[0].afbeelding_id, foto, 'deelnemer krijgt de foto bij het bericht');
+    const opgehaald = await vraag('eva', 'GET', `/api/afbeeldingen/${foto}`);
+    assert.equal(opgehaald.status, 200);
+    assert.match(opgehaald.soort, /image\/jpeg/);
+
+    // een foto van een andere reis koppelen wordt geweigerd
+    const vreemd = await vraag('leiderB1', 'POST', `/api/reizen/${reis}/berichten`, { tekst: 'x', afbeelding_id: zaad.ids.foto.A1 });
+    assert.ok([400, 404].includes(vreemd.status), `foto van een andere reis: ${vreemd.status}`);
+
+    assert.equal((await vraag('leiderB1', 'DELETE', `/api/berichten/${bericht.json.id}`)).status, 200);
+    assert.equal((await q('select 1 from afbeeldingen where id = $1', [foto])).length, 0, 'foto verdwijnt met het bericht');
+    assert.equal((await vraag('eva', 'GET', `/api/afbeeldingen/${foto}`)).status, 404);
   });
 
   test('uitloggen maakt de sessie ongeldig', async () => {

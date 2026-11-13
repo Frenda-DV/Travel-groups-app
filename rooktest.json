@@ -1,0 +1,6 @@
+{
+  "uitleg": "Staat dit bestand in de repository, dan zorgt elke build voor een aparte testorganisatie met alleen fictieve gegevens en zet hij een verse, eenmalige beheerderslink in de build-log. Daarmee wordt de live-omgeving na elke wijziging doorgetest (npm run test:live). Verwijder dit bestand om dat uit te zetten.",
+  "organisatie": "Proeftuin (automatische test)",
+  "beheerder": "Testbeheerder",
+  "email": "delivered+beheer@resend.dev"
+}

@@ -3,9 +3,9 @@
 // zodat het programma er ook zonder verbinding direct staat.
 import { html, useCallback, useEffect, useRef, useState } from './vendor/preact-htm.js';
 import { api, GeenVerbinding } from './api.js';
-import { lees, bewaar, wisReis } from './opslag.js';
+import { lees, bewaar, wisReis, bewaarFotos } from './opslag.js';
 import { isoDatum, klokTijd, datumLang, weekdagKort, dagMaand, moment, metLinks, moetErZijn, verschillen } from './hulp.js';
-import { Icoon, Melding, Sfeerbeeld } from './onderdelen.js';
+import { Foto, Icoon, Melding, Sfeerbeeld } from './onderdelen.js';
 import { OnderdeelVenster, DagVenster, InfoVenster, BerichtFormulier, Beheer } from './beheer.js';
 
 const VEROUDERD_NA = 12 * 3600 * 1000;
@@ -52,6 +52,9 @@ export function ReisScherm({ reisId, tab, ik, ga, laadIk, uitloggen }) {
       setMerken(m);
       setGeenToegang(false);
       setVerbinding('online');
+      // Eigen foto's van de reisleiding ook op het toestel zetten, voor zonder internet.
+      bewaarFotos([vers.reis.omslag_afbeelding_id, ...vers.berichten.map((b) => b.afbeelding_id),
+        ...vers.dagen.flatMap((d) => [d.afbeelding_id, ...d.onderdelen.map((o) => o.afbeelding_id)])].filter(Boolean));
     } catch (e) {
       if (!(e instanceof GeenVerbinding)) throw e;
       setVerbinding('offline');
@@ -149,7 +152,7 @@ export function ReisScherm({ reisId, tab, ik, ga, laadIk, uitloggen }) {
   return html`
     <div class="reis">
       <header class="kop beeldvlak">
-        <${Sfeerbeeld} naam=${reis.omslag} />
+        <${Sfeerbeeld} naam=${reis.omslag} eigen=${reis.omslag_afbeelding_id} />
         ${meerdereReizen && html`<a class="terug" href="/" onClick=${(e) => { e.preventDefault(); ga('/'); }}><${Icoon} naam="terug" /> Alle reizen</a>`}
         <p class="kop-org">${reis.organisatie}</p>
         <h1>${reis.titel}</h1>
@@ -162,7 +165,7 @@ export function ReisScherm({ reisId, tab, ik, ga, laadIk, uitloggen }) {
         ${actief === 'berichten' && html`<${Berichten} bundel=${bundel} magBeheren=${magBeheren} ververs=${ververs} gelezenTot=${gelezenBijOpenen ?? gelezenTot} />`}
         ${actief === 'info' && html`<${Info} bundel=${bundel} magBeheren=${magBeheren} ververs=${ververs} ik=${ik} uitloggen=${uitloggen} reisId=${reisId} />`}
         ${actief === 'notities' && html`<${Notities} reisId=${reisId} />`}
-        ${actief === 'beheer' && html`<${Beheer} reis=${reis} ververs=${ververs} online=${online} laadIk=${laadIk} />`}
+        ${actief === 'beheer' && html`<${Beheer} reis=${reis} ververs=${ververs} online=${online} laadIk=${laadIk} ga=${ga} />`}
       </main>
       <nav class="tabs" aria-label="Onderdelen van deze reis">
         ${tabs.map(([naam, label]) => html`
@@ -271,6 +274,7 @@ function Programma({ bundel, merken, begrepen, nu, magBeheren, ververs, gelezenT
         <h2 id="dag-titel">${dag.titel || 'Programma'}</h2>
         ${dag.ondertitel && html`<p class="dag-ondertitel">${dag.ondertitel}</p>`}
         ${dag.toelichting && html`<p class="dag-toelichting">${metLinks(dag.toelichting)}</p>`}
+        <${Foto} id=${dag.afbeelding_id} alt=${`Foto bij ${dag.titel || datumLang(dag.datum)}`} />
       </div>
 
       ${dag.onderdelen.length === 0
@@ -290,7 +294,7 @@ function Programma({ bundel, merken, begrepen, nu, magBeheren, ververs, gelezenT
     </section>
 
     ${magBeheren && html`<${Afdruk} bundel=${bundel} />`}
-    ${venster?.soort === 'onderdeel' && html`<${OnderdeelVenster} dag=${dag} onderdeel=${venster.onderdeel} onKlaar=${klaar} onSluit=${() => setVenster(null)} />`}
+    ${venster?.soort === 'onderdeel' && html`<${OnderdeelVenster} reis=${bundel.reis} dag=${dag} onderdeel=${venster.onderdeel} onKlaar=${klaar} onSluit=${() => setVenster(null)} />`}
     ${venster?.soort === 'dag' && html`<${DagVenster} reis=${bundel.reis} dag=${dag} onKlaar=${klaar} onSluit=${() => setVenster(null)} />`}
     ${venster?.soort === 'dag-nieuw' && html`<${DagVenster} reis=${bundel.reis} onKlaar=${klaar} onSluit=${() => setVenster(null)} />`}`;
 }
@@ -317,6 +321,7 @@ function Onderdeel({ o, merk, voorbij, magBeheren, wijzig }) {
               ${o.verzamelpunt && html`<p class="verzamel-plek"><span class="verborgen">Verzamelpunt: </span>${o.verzamelpunt}</p>`}
             </div>
           </div>`}
+        <${Foto} id=${o.afbeelding_id} alt=${`Foto bij ${o.titel}`} />
         ${o.omschrijving && html`<p class="omschrijving">${metLinks(o.omschrijving)}</p>`}
         ${o.meenemen && html`<p class="meenemen"><strong>Meenemen:</strong> ${o.meenemen}</p>`}
         ${magBeheren && html`<button class="knop klein tweede niet-afdrukken" onClick=${wijzig} aria-label=${`Wijzig ${o.titel}`}>Wijzig</button>`}
@@ -375,6 +380,7 @@ function Berichten({ bundel, magBeheren, ververs, gelezenTot }) {
             <span class="bericht-van">${b.auteur_naam}, ${moment(Date.parse(b.geplaatst_op))}</span>
           </p>
           <p class="bericht-tekst">${metLinks(b.tekst)}</p>
+          <${Foto} id=${b.afbeelding_id} alt=${`Foto bij bericht van ${b.auteur_naam}`} />
           ${magBeheren && html`<button class="knop klein tweede" onClick=${() => verwijder(b)}>Verwijder</button>`}
         </li>`)}
     </ul>`;

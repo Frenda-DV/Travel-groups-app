@@ -121,7 +121,7 @@ function Start({ ik, offline, ga, laadIk, uitloggen }) {
   const kaart = (r) => html`
     <li>
       <a class="reiskaart" href=${`/reis/${r.id}/programma`} onClick=${open(r.id)}>
-        <span class="reiskaart-beeld beeldvlak"><${Sfeerbeeld} naam=${r.omslag} lui /></span>
+        <span class="reiskaart-beeld beeldvlak"><${Sfeerbeeld} naam=${r.omslag} eigen=${r.omslag_afbeelding_id} lui /></span>
         <span class="reiskaart-tekst">
           <span class="reiskaart-titel">${r.titel}</span>
           <span class="reiskaart-datum">${periode(r.start_datum, r.eind_datum)}</span>

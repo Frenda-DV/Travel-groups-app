@@ -4,7 +4,7 @@
 import { html, useEffect, useState } from './vendor/preact-htm.js';
 import { api, GeenVerbinding } from './api.js';
 import { datumLang } from './hulp.js';
-import { Melding, Sfeerbeeld, Veld, Venster, Vinkje, useActie } from './onderdelen.js';
+import { FotoKiezer, Melding, Sfeerbeeld, Veld, Venster, Vinkje, useActie } from './onderdelen.js';
 
 function Knoppen({ bezig, onVerwijder, verwijderLabel = 'Verwijder', bewaarLabel = 'Bewaar' }) {
   return html`
@@ -14,9 +14,9 @@ function Knoppen({ bezig, onVerwijder, verwijderLabel = 'Verwijder', bewaarLabel
     </div>`;
 }
 
-export function OnderdeelVenster({ dag, onderdeel, onKlaar, onSluit }) {
+export function OnderdeelVenster({ reis, dag, onderdeel, onKlaar, onSluit }) {
   const [v, setV] = useState(() => ({
-    begin_tijd: '', eind_tijd: '', titel: '', omschrijving: '', verzameltijd: '', verzamelpunt: '', meenemen: '', facultatief: false,
+    begin_tijd: '', eind_tijd: '', titel: '', omschrijving: '', verzameltijd: '', verzamelpunt: '', meenemen: '', facultatief: false, afbeelding_id: null,
     ...(onderdeel || {}),
   }));
   const zet = (veld) => (waarde) => setV((oud) => ({ ...oud, [veld]: waarde }));
@@ -47,6 +47,7 @@ export function OnderdeelVenster({ dag, onderdeel, onKlaar, onSluit }) {
           uitleg="Het tijdstip waarop iedereen bij het verzamelpunt moet staan." />
         <${Veld} label="Verzamelpunt" soort="textarea" rijen="2" waarde=${v.verzamelpunt} zet=${zet('verzamelpunt')} maxlength="500"
           uitleg="Zo precies mogelijk, met een herkenningspunt. Bijvoorbeeld: bij de loopplank, de gids draagt een oranje jas." />
+        <${FotoKiezer} reisId=${reis.id} waarde=${v.afbeelding_id} zet=${zet('afbeelding_id')} label="Foto, bijvoorbeeld van het verzamelpunt" />
         <${Veld} label="Omschrijving" soort="textarea" waarde=${v.omschrijving} zet=${zet('omschrijving')} maxlength="4000" />
         <${Veld} label="Meenemen" waarde=${v.meenemen} zet=${zet('meenemen')} maxlength="500" />
         <${Vinkje} label="Alleen voor wie zich heeft opgegeven (facultatief)" waarde=${v.facultatief} zet=${zet('facultatief')} />
@@ -57,7 +58,7 @@ export function OnderdeelVenster({ dag, onderdeel, onKlaar, onSluit }) {
 }
 
 export function DagVenster({ reis, dag, onKlaar, onSluit }) {
-  const [v, setV] = useState(() => ({ datum: '', titel: '', ondertitel: '', toelichting: '', ...(dag || {}) }));
+  const [v, setV] = useState(() => ({ datum: '', titel: '', ondertitel: '', toelichting: '', afbeelding_id: null, ...(dag || {}) }));
   const zet = (veld) => (waarde) => setV((oud) => ({ ...oud, [veld]: waarde }));
   const { bezig, fout, voerUit } = useActie();
 
@@ -81,6 +82,7 @@ export function DagVenster({ reis, dag, onKlaar, onSluit }) {
         <${Veld} label="Ondertitel" waarde=${v.ondertitel} zet=${zet('ondertitel')} maxlength="200"
           uitleg="Bijvoorbeeld: in de haven van 08:00 tot 16:00." />
         <${Veld} label="Toelichting" soort="textarea" waarde=${v.toelichting} zet=${zet('toelichting')} maxlength="4000" />
+        <${FotoKiezer} reisId=${reis.id} waarde=${v.afbeelding_id} zet=${zet('afbeelding_id')} label="Foto bij deze dag" />
         <${Melding}>${fout}<//>
         <${Knoppen} bezig=${bezig} onVerwijder=${dag ? verwijder : null} verwijderLabel="Verwijder dag" />
       </form>
@@ -120,15 +122,17 @@ export function InfoVenster({ reis, blok, onKlaar, onSluit }) {
 export function BerichtFormulier({ reis, onKlaar }) {
   const [tekst, setTekst] = useState('');
   const [belangrijk, setBelangrijk] = useState(false);
+  const [foto, setFoto] = useState(null);
   const [geplaatst, setGeplaatst] = useState(false);
   const { bezig, fout, voerUit } = useActie();
 
   async function plaats(e) {
     e.preventDefault();
     setGeplaatst(false);
-    if (await voerUit(() => api('POST', `/api/reizen/${reis.id}/berichten`, { tekst, belangrijk }))) {
+    if (await voerUit(() => api('POST', `/api/reizen/${reis.id}/berichten`, { tekst, belangrijk, afbeelding_id: foto }))) {
       setTekst('');
       setBelangrijk(false);
+      setFoto(null);
       setGeplaatst(true);
       onKlaar();
     }
@@ -136,6 +140,7 @@ export function BerichtFormulier({ reis, onKlaar }) {
   return html`
     <form class="berichtformulier" onSubmit=${plaats}>
       <${Veld} label="Nieuw bericht aan de groep" soort="textarea" rijen="3" waarde=${tekst} zet=${setTekst} verplicht maxlength="4000" />
+      <${FotoKiezer} reisId=${reis.id} waarde=${foto} zet=${setFoto} label="Foto bij dit bericht" />
       <${Vinkje} label="Belangrijk: toon dit bericht ook boven het programma" waarde=${belangrijk} zet=${setBelangrijk} />
       <${Melding}>${fout}<//>
       <${Melding} soort="goed">${geplaatst && 'Je bericht is geplaatst.'}<//>
@@ -145,8 +150,8 @@ export function BerichtFormulier({ reis, onKlaar }) {
 
 const OMSLAGEN = [['zee', 'Op zee'], ['fjorden', 'Fjorden'], ['rivier', 'Rivier'], ['stad', 'Stad'], ['landschap', 'Landschap']];
 
-export function ReisVenster({ orgId, reis, onKlaar, onSluit }) {
-  const [v, setV] = useState(() => ({ titel: '', ondertitel: '', start_datum: '', eind_datum: '', gearchiveerd: false, omslag: 'zee', ...(reis || {}) }));
+export function ReisVenster({ orgId, reis, onKlaar, onSluit, onVerwijderd }) {
+  const [v, setV] = useState(() => ({ titel: '', ondertitel: '', start_datum: '', eind_datum: '', gearchiveerd: false, omslag: 'zee', omslag_afbeelding_id: null, ...(reis || {}) }));
   const zet = (veld) => (waarde) => setV((oud) => ({ ...oud, [veld]: waarde }));
   const { bezig, fout, voerUit } = useActie();
 
@@ -154,6 +159,10 @@ export function ReisVenster({ orgId, reis, onKlaar, onSluit }) {
     e.preventDefault();
     const antwoord = await voerUit(() => (reis ? api('PUT', `/api/reizen/${reis.id}`, v) : api('POST', `/api/organisaties/${orgId}/reizen`, v)));
     if (antwoord) onKlaar(antwoord.data);
+  }
+  async function verwijder() {
+    if (!window.confirm(`"${reis.titel}" definitief verwijderen? Het programma, de berichten, de foto's en de deelnemerslijst van deze reis worden gewist. Dit kan niet ongedaan worden gemaakt.`)) return;
+    if (await voerUit(() => api('DELETE', `/api/reizen/${reis.id}`))) onVerwijderd?.();
   }
   return html`
     <${Venster} titel=${reis ? 'Reisgegevens wijzigen' : 'Nieuwe reis'} onSluit=${onSluit}>
@@ -174,10 +183,13 @@ export function ReisVenster({ orgId, reis, onKlaar, onSluit }) {
               </label>`)}
           </div>
         </fieldset>
-        ${!reis && html`<p class="uitleg">Voor elke dag van de reis wordt alvast een lege dag in het programma gezet.</p>`}
+        ${reis && html`<${FotoKiezer} reisId=${reis.id} waarde=${v.omslag_afbeelding_id} zet=${zet('omslag_afbeelding_id')}
+            label="Of een eigen foto als omslag (gaat voor het sfeerbeeld)" />`}
+        ${!reis && html`<p class="uitleg">Voor elke dag van de reis wordt alvast een lege dag in het programma gezet. Een eigen omslagfoto kun je daarna toevoegen via Reisgegevens wijzigen.</p>`}
         ${reis && html`<${Vinkje} label="Reis afsluiten: deelnemers en groepsleiders kunnen de reis niet meer openen" waarde=${v.gearchiveerd} zet=${zet('gearchiveerd')} />`}
         <${Melding}>${fout}<//>
-        <${Knoppen} bezig=${bezig} />
+        <${Knoppen} bezig=${bezig} onVerwijder=${reis?.gearchiveerd ? verwijder : null} verwijderLabel="Reis definitief verwijderen" />
+        ${reis && !reis.gearchiveerd && html`<p class="uitleg">Een reis verwijderen kan nadat je hem hebt afgesloten.</p>`}
       </form>
     <//>`;
 }
@@ -279,7 +291,7 @@ function Links({ resultaat, mailActief, onSluit }) {
     </section>`;
 }
 
-export function Beheer({ reis, ververs, online, laadIk }) {
+export function Beheer({ reis, ververs, online, laadIk, ga }) {
   const [gegevens, setGegevens] = useState(null);
   const [venster, setVenster] = useState(null);
   const [resultaat, setResultaat] = useState(null);
@@ -370,5 +382,6 @@ export function Beheer({ reis, ververs, online, laadIk }) {
     ${venster === 'toevoegen' && html`<${Toevoegen} reis=${reis} magLeiders=${magLeiders} onSluit=${() => setVenster(null)}
         onKlaar=${(r) => { setVenster(null); setResultaat(r); laad(); }} />`}
     ${venster === 'reis' && html`<${ReisVenster} reis=${reis} onSluit=${() => setVenster(null)}
-        onKlaar=${() => { setVenster(null); ververs(); laadIk(); }} />`}`;
+        onKlaar=${() => { setVenster(null); ververs(); laadIk(); }}
+        onVerwijderd=${async () => { setVenster(null); await laadIk(); ga('/', { vervang: true }); }} />`}`;
 }

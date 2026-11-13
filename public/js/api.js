@@ -8,13 +8,14 @@ export class ServerStoring extends GeenVerbinding {}
 
 export async function api(methode, pad, body) {
   const stop = new AbortController();
-  const klok = setTimeout(() => stop.abort(), 12000);
+  // Een foto versturen via trage wifi mag langer duren dan een gewone aanvraag.
+  const klok = setTimeout(() => stop.abort(), body instanceof Blob ? 60000 : 12000);
   let antwoord;
   try {
     antwoord = await fetch(pad, {
       method: methode,
-      headers: body === undefined ? {} : { 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined ? {} : { 'content-type': body instanceof Blob ? body.type : 'application/json' },
+      body: body === undefined ? undefined : body instanceof Blob ? body : JSON.stringify(body),
       credentials: 'same-origin',
       cache: 'no-store',
       signal: stop.signal,

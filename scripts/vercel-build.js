@@ -6,8 +6,10 @@
 //        EERSTE_ORGANISATIE="Naam organisatie|Naam beheerder|adres@voorbeeld.nl"
 //          maakt een organisatie met een eerste beheerder
 //      De links verschijnen in de build-log van Vercel en werken één keer.
+import fs from 'node:fs';
 import { migreer } from './migreer.js';
-import { alsEigenaar, nodigUit } from './hulp.js';
+import { alsEigenaar, nodigUit, basisUrl } from './hulp.js';
+import { nieuwToken, hash } from '../server/beveiliging.js';
 import { vulDemo, toonLinks, DEMO_ORGANISATIE } from './demo-vullen.js';
 import { databaseUrls } from '../server/omgeving.js';
 
@@ -46,4 +48,24 @@ if (EERSTE_ORGANISATIE) {
     return nodigUit(db, { orgId: rows[0].id, rol: 'beheerder', naam: beheerder, email });
   });
   console.log(link ? `Organisatie "${naam}" is aangemaakt. Eenmalige link voor ${beheerder}:\n${link}` : `Organisatie "${naam}" bestaat al.`);
+}
+
+// Proeftuin: een aparte organisatie met alleen fictieve gegevens, om de
+// live-omgeving na elke wijziging door te testen. Elke build maakt een verse,
+// eenmalige beheerderslink (één dag geldig) en trekt de vorige toegang in.
+if (fs.existsSync('rooktest.json')) {
+  const proef = JSON.parse(fs.readFileSync('rooktest.json', 'utf8'));
+  const link = await alsEigenaar(async (db) => {
+    let org = (await db.query('select id from organisaties where naam = $1', [proef.organisatie])).rows[0]?.id;
+    org ??= (await db.query('insert into organisaties (naam) values ($1) returning id', [proef.organisatie])).rows[0].id;
+    const lid = (await db.query('select id from lidmaatschappen where org_id = $1 and reis_id is null and email = $2', [org, proef.email])).rows[0];
+    if (!lid) return nodigUit(db, { orgId: org, rol: 'beheerder', naam: proef.beheerder, email: proef.email });
+    const token = nieuwToken();
+    await db.query(
+      `update lidmaatschappen set uitnodiging_hash = $2, uitnodiging_verloopt_op = now() + interval '1 day',
+         uitnodiging_gebruikt_op = null, ingetrokken_op = null where id = $1`, [lid.id, hash(token)]);
+    await db.query('delete from sessie_toegang where lidmaatschap_id = $1', [lid.id]);
+    return `${basisUrl()}/u/${token}`;
+  });
+  console.log(`ROOKTEST ${link}`);
 }

@@ -14,7 +14,8 @@
     "vercel-build": "node scripts/vercel-build.js",
     "test": "node --test --test-concurrency=1 \"test/*.test.js\"",
     "test:e2e": "node --test --test-concurrency=1 --test-timeout=120000 \"e2e/*.test.js\"",
-    "test:alles": "npm test && npm run test:e2e"
+    "test:alles": "npm test && npm run test:e2e",
+    "test:live": "node e2e/live.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

@@ -326,6 +326,18 @@ img { max-width: 100%; }
 
 .notitie { width: 100%; font-family: var(--schreefloos); }
 
+/* ---- Eigen foto's van de reisleiding ------------------------------------------ */
+
+.foto-link { display: block; margin: .6rem 0 .8rem; border-radius: var(--rond-klein); overflow: hidden; }
+.foto-link[hidden] { display: none; }
+.foto { display: block; width: 100%; max-height: 340px; object-fit: cover; background: var(--navy-100); }
+.dag-kop .foto-link { margin-top: .9rem; border-radius: var(--rond); box-shadow: var(--schaduw-klein); }
+.veldnaam { display: block; font-weight: 700; margin-bottom: .3rem; }
+.foto-voorbeeld { display: block; width: 100%; max-height: 190px; object-fit: cover; border-radius: var(--rond-klein); margin-bottom: .5rem; background: var(--navy-100); }
+.fotoknoppen { display: flex; flex-wrap: wrap; gap: .5rem; }
+.fotoknoppen .knop.bezig { opacity: .7; }
+.fotokiezer:focus-within .knop.tweede { outline: 3px solid var(--goud-400); outline-offset: 3px; }
+
 /* ---- Formulieren en vensters -------------------------------------------------- */
 
 .veld { margin-bottom: 1.05rem; }
@@ -400,7 +412,7 @@ h2 + .uitleg { margin-top: -.1rem; }
 
 @media print {
   body { background: #fff; font-size: 11pt; }
-  .kop, .status, .tabs, .dagkiezer, .eerstvolgende, .dag, .gewijzigd-balk, .belangrijk-balk, .niet-afdrukken { display: none !important; }
+  .kop, .status, .tabs, .dagkiezer, .eerstvolgende, .dag, .gewijzigd-balk, .belangrijk-balk, .niet-afdrukken, .foto-link { display: none !important; }
   .reis { padding: 0; max-width: none; box-shadow: none; }
   .alleen-afdrukken { display: block; }
   .afdruk-dag { break-inside: avoid; margin-bottom: 1.2em; }

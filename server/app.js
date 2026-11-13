@@ -55,6 +55,20 @@ function emailadres(waarde) {
   return waarde;
 }
 const bool = (waarde) => waarde === true;
+const fotoId = (waarde) => {
+  if (waarde == null || waarde === '') return null;
+  if (typeof waarde !== 'string' || !UUID.test(waarde)) throw new Fout(400, 'Ongeldige foto.');
+  return waarde;
+};
+
+// Herkent een foto aan de eerste bytes; op de opgegeven bestandssoort wordt niet vertrouwd.
+function fotoSoort(bytes) {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  return null;
+}
+const MAX_FOTO = 650_000;
 
 async function invoer(c) {
   if (!(c.req.header('content-type') || '').startsWith('application/json')) throw new Fout(415, 'Verwacht JSON.');
@@ -175,7 +189,7 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
 
   async function haalReis(db, reisId) {
     const { rows } = await db.query(
-      `select r.id, r.org_id, r.titel, r.ondertitel, r.start_datum, r.eind_datum, r.gearchiveerd, r.omslag,
+      `select r.id, r.org_id, r.titel, r.ondertitel, r.start_datum, r.eind_datum, r.gearchiveerd, r.omslag, r.omslag_afbeelding_id,
               o.naam as organisatie, reis_rol(r.id) as rol, is_beheerder(r.org_id) as beheerder,
               mag_reis_beheren(r.id, r.org_id) as mag_beheren
        from reizen r join organisaties o on o.id = r.org_id
@@ -188,13 +202,20 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     if (!reis.mag_beheren) throw new Fout(403, 'Alleen de groepsleider kan dit wijzigen.');
     return reis;
   }
-  const TABELLEN = { dagen: 'programma_dagen', onderdelen: 'programma_onderdelen', info: 'info_blokken', berichten: 'berichten' };
+  const TABELLEN = { dagen: 'programma_dagen', onderdelen: 'programma_onderdelen', info: 'info_blokken', berichten: 'berichten', afbeeldingen: 'afbeeldingen' };
+  const MET_FOTO = new Set(['dagen', 'onderdelen', 'berichten']);
   async function eisBeheerVan(db, soort, id) {
     const { rows } = await db.query(
-      `select reis_id, org_id, mag_reis_beheren(reis_id, org_id) as mag from ${TABELLEN[soort]} where id = $1`, [uuid(id)]);
+      `select reis_id, org_id, ${MET_FOTO.has(soort) ? 'afbeelding_id' : 'null as afbeelding_id'},
+              mag_reis_beheren(reis_id, org_id) as mag from ${TABELLEN[soort]} where id = $1`, [uuid(id)]);
     if (!rows[0]) throw new Fout(404, 'Niet gevonden.');
     if (!rows[0].mag) throw new Fout(403, 'Alleen de groepsleider kan dit wijzigen.');
     return rows[0];
+  }
+
+  // Een foto die nergens meer bij hoort wordt direct verwijderd.
+  async function ruimFotoOp(db, oud, nieuw) {
+    if (oud && oud !== nieuw) await db.query('delete from afbeeldingen where id = $1', [oud]);
   }
 
   // ---- Inloggen en uitnodigingen ------------------------------------------
@@ -270,7 +291,7 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     const leden = await db.query('select m.naam, m.email, m.rol, m.org_id, m.reis_id from mijn_leden() m order by m.naam');
     const organisaties = await db.query('select o.id, o.naam, is_beheerder(o.id) as beheerder from organisaties o order by o.naam');
     const reizen = await db.query(
-      `select r.id, r.org_id, r.titel, r.ondertitel, r.start_datum, r.eind_datum, r.gearchiveerd, r.omslag,
+      `select r.id, r.org_id, r.titel, r.ondertitel, r.start_datum, r.eind_datum, r.gearchiveerd, r.omslag, r.omslag_afbeelding_id,
               reis_rol(r.id) as rol, mag_reis_beheren(r.id, r.org_id) as mag_beheren
        from reizen r order by r.start_datum, r.titel`);
     return c.json({
@@ -320,9 +341,12 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     if (!reis.beheerder) throw new Fout(403, 'Alleen een beheerder kan de reisgegevens wijzigen.');
     const data = await invoer(c);
     const r = reisInvoer(data);
+    const omslagFoto = fotoId(data.omslag_afbeelding_id);
     await db.query(
-      `update reizen set titel = $2, ondertitel = $3, start_datum = $4, eind_datum = $5, gearchiveerd = $6, omslag = $7 where id = $1`,
-      [reis.id, r.titel, r.ondertitel, r.start, r.eind, bool(data.gearchiveerd), r.omslag]);
+      `update reizen set titel = $2, ondertitel = $3, start_datum = $4, eind_datum = $5, gearchiveerd = $6, omslag = $7,
+         omslag_afbeelding_id = $8 where id = $1`,
+      [reis.id, r.titel, r.ondertitel, r.start, r.eind, bool(data.gearchiveerd), r.omslag, omslagFoto]);
+    await ruimFotoOp(db, reis.omslag_afbeelding_id, omslagFoto);
     await vulDagen(db, reis.org_id, reis.id, r.start, r.eind);
     return c.json({ ok: true });
   });
@@ -333,18 +357,18 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     const db = c.get('db');
     const reis = await haalReis(db, c.req.param('reisId'));
     const dagen = await db.query(
-      `select id, datum, titel, ondertitel, toelichting, bijgewerkt_op
+      `select id, datum, titel, ondertitel, toelichting, afbeelding_id, bijgewerkt_op
        from programma_dagen where reis_id = $1 order by datum`, [reis.id]);
     const onderdelen = await db.query(
       `select id, dag_id, to_char(begin_tijd, 'HH24:MI') as begin_tijd, to_char(eind_tijd, 'HH24:MI') as eind_tijd,
               titel, omschrijving, to_char(verzameltijd, 'HH24:MI') as verzameltijd, verzamelpunt, meenemen,
-              facultatief, bijgewerkt_op
+              facultatief, afbeelding_id, bijgewerkt_op
        from programma_onderdelen where reis_id = $1
        order by coalesce(verzameltijd, begin_tijd) nulls first, titel`, [reis.id]);
     const info = await db.query(
       `select id, titel, tekst, volgorde, bijgewerkt_op from info_blokken where reis_id = $1 order by volgorde, titel`, [reis.id]);
     const berichten = await db.query(
-      `select id, tekst, belangrijk, auteur_naam, geplaatst_op from berichten
+      `select id, tekst, belangrijk, auteur_naam, afbeelding_id, geplaatst_op from berichten
        where reis_id = $1 order by geplaatst_op desc limit 200`, [reis.id]);
     const leiders = await db.query('select reis_groepsleiders($1) as naam', [reis.id]);
     const perDag = new Map(dagen.rows.map((d) => [d.id, { ...d, onderdelen: [] }]));
@@ -362,6 +386,7 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
   // ---- Programma -------------------------------------------------------------
 
   const dagInvoer = (data) => ({
+    foto: fotoId(data.afbeelding_id),
     titel: tekst(data.titel, 'De titel', { max: 120 }),
     ondertitel: tekst(data.ondertitel, 'De ondertitel', { max: 200 }),
     toelichting: tekst(data.toelichting, 'De toelichting', { max: 4000 }),
@@ -373,26 +398,29 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     const data = await invoer(c);
     const d = dagInvoer(data);
     const { rows } = await db.query(
-      `insert into programma_dagen (org_id, reis_id, datum, titel, ondertitel, toelichting)
-       values ($1, $2, $3, $4, $5, $6) on conflict (reis_id, datum) do nothing returning id`,
-      [reis.org_id, reis.id, datum(data.datum, 'De datum'), d.titel, d.ondertitel, d.toelichting]);
+      `insert into programma_dagen (org_id, reis_id, datum, titel, ondertitel, toelichting, afbeelding_id)
+       values ($1, $2, $3, $4, $5, $6, $7) on conflict (reis_id, datum) do nothing returning id`,
+      [reis.org_id, reis.id, datum(data.datum, 'De datum'), d.titel, d.ondertitel, d.toelichting, d.foto]);
     if (!rows[0]) throw new Fout(409, 'Voor deze datum bestaat al een dag in het programma.');
     return c.json({ id: rows[0].id }, 201);
   });
 
   app.put('/api/dagen/:id', metSessie, async (c) => {
     const db = c.get('db');
-    await eisBeheerVan(db, 'dagen', c.req.param('id'));
+    const oud = await eisBeheerVan(db, 'dagen', c.req.param('id'));
     const d = dagInvoer(await invoer(c));
-    await db.query('update programma_dagen set titel = $2, ondertitel = $3, toelichting = $4 where id = $1',
-      [c.req.param('id'), d.titel, d.ondertitel, d.toelichting]);
+    await db.query('update programma_dagen set titel = $2, ondertitel = $3, toelichting = $4, afbeelding_id = $5 where id = $1',
+      [c.req.param('id'), d.titel, d.ondertitel, d.toelichting, d.foto]);
+    await ruimFotoOp(db, oud.afbeelding_id, d.foto);
     return c.json({ ok: true });
   });
 
   app.delete('/api/dagen/:id', metSessie, async (c) => {
     const db = c.get('db');
-    await eisBeheerVan(db, 'dagen', c.req.param('id'));
+    const oud = await eisBeheerVan(db, 'dagen', c.req.param('id'));
+    await db.query(`delete from afbeeldingen where id in (select afbeelding_id from programma_onderdelen where dag_id = $1)`, [c.req.param('id')]);
     await db.query('delete from programma_dagen where id = $1', [c.req.param('id')]);
+    await ruimFotoOp(db, oud.afbeelding_id, null);
     return c.json({ ok: true });
   });
 
@@ -405,6 +433,7 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     tekst(data.verzamelpunt, 'Het verzamelpunt', { max: 500 }),
     tekst(data.meenemen, 'Meenemen', { max: 500 }),
     bool(data.facultatief),
+    fotoId(data.afbeelding_id),
   ];
 
   app.post('/api/dagen/:dagId/onderdelen', metSessie, async (c) => {
@@ -413,27 +442,29 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     const velden = onderdeelInvoer(await invoer(c));
     const { rows } = await db.query(
       `insert into programma_onderdelen
-         (org_id, reis_id, dag_id, begin_tijd, eind_tijd, titel, omschrijving, verzameltijd, verzamelpunt, meenemen, facultatief)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
+         (org_id, reis_id, dag_id, begin_tijd, eind_tijd, titel, omschrijving, verzameltijd, verzamelpunt, meenemen, facultatief, afbeelding_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
       [dag.org_id, dag.reis_id, c.req.param('dagId'), ...velden]);
     return c.json({ id: rows[0].id }, 201);
   });
 
   app.put('/api/onderdelen/:id', metSessie, async (c) => {
     const db = c.get('db');
-    await eisBeheerVan(db, 'onderdelen', c.req.param('id'));
+    const oud = await eisBeheerVan(db, 'onderdelen', c.req.param('id'));
     const velden = onderdeelInvoer(await invoer(c));
     await db.query(
       `update programma_onderdelen set begin_tijd = $2, eind_tijd = $3, titel = $4, omschrijving = $5,
-         verzameltijd = $6, verzamelpunt = $7, meenemen = $8, facultatief = $9 where id = $1`,
+         verzameltijd = $6, verzamelpunt = $7, meenemen = $8, facultatief = $9, afbeelding_id = $10 where id = $1`,
       [c.req.param('id'), ...velden]);
+    await ruimFotoOp(db, oud.afbeelding_id, velden.at(-1));
     return c.json({ ok: true });
   });
 
   app.delete('/api/onderdelen/:id', metSessie, async (c) => {
     const db = c.get('db');
-    await eisBeheerVan(db, 'onderdelen', c.req.param('id'));
+    const oud = await eisBeheerVan(db, 'onderdelen', c.req.param('id'));
     await db.query('delete from programma_onderdelen where id = $1', [c.req.param('id')]);
+    await ruimFotoOp(db, oud.afbeelding_id, null);
     return c.json({ ok: true });
   });
 
@@ -477,16 +508,17 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     const data = await invoer(c);
     const { rows: naam } = await db.query('select mijn_naam($1, $2) as naam', [reis.id, reis.org_id]);
     const { rows } = await db.query(
-      `insert into berichten (org_id, reis_id, tekst, belangrijk, auteur_naam) values ($1, $2, $3, $4, $5) returning id`,
+      `insert into berichten (org_id, reis_id, tekst, belangrijk, auteur_naam, afbeelding_id) values ($1, $2, $3, $4, $5, $6) returning id`,
       [reis.org_id, reis.id, tekst(data.tekst, 'Het bericht', { max: 4000, verplicht: true }), bool(data.belangrijk),
-        naam[0].naam || 'Reisleiding']);
+        naam[0].naam || 'Reisleiding', fotoId(data.afbeelding_id)]);
     return c.json({ id: rows[0].id }, 201);
   });
 
   app.delete('/api/berichten/:id', metSessie, async (c) => {
     const db = c.get('db');
-    await eisBeheerVan(db, 'berichten', c.req.param('id'));
+    const oud = await eisBeheerVan(db, 'berichten', c.req.param('id'));
     await db.query('delete from berichten where id = $1', [c.req.param('id')]);
+    await ruimFotoOp(db, oud.afbeelding_id, null);
     return c.json({ ok: true });
   });
 
@@ -603,6 +635,48 @@ export function maakApp({ pool, mail, basisUrl = '', vertrouwProxy = false, veil
     c.header('Content-Type', 'text/csv; charset=utf-8');
     c.header('Content-Disposition', `attachment; filename="deelnemers-${bestand}.csv"`);
     return c.body(`﻿${regels.map((r) => r.map(cel).join(';')).join('\r\n')}\r\n`);
+  });
+
+  // ---- Foto's van de reisleiding ---------------------------------------------
+
+  app.post('/api/reizen/:reisId/afbeeldingen', metSessie, async (c) => {
+    const db = c.get('db');
+    const reis = await haalReisVoorBeheer(db, c.req.param('reisId'));
+    const bytes = Buffer.from(await c.req.arrayBuffer());
+    if (bytes.length > MAX_FOTO) throw new Fout(413, 'Deze foto is te groot. Kies een kleinere foto.');
+    const soort = bytes.length >= 50 ? fotoSoort(bytes) : null;
+    if (!soort) throw new Fout(400, 'Dit bestand is geen foto die de app kan tonen. Gebruik een JPG- of PNG-foto.');
+    const { rows } = await db.query(
+      'insert into afbeeldingen (org_id, reis_id, soort, gegevens) values ($1, $2, $3, $4) returning id',
+      [reis.org_id, reis.id, soort, bytes]);
+    return c.json({ id: rows[0].id }, 201);
+  });
+
+  app.get('/api/afbeeldingen/:id', metSessie, async (c) => {
+    const { rows } = await c.get('db').query('select soort, gegevens from afbeeldingen where id = $1', [uuid(c.req.param('id'))]);
+    if (!rows[0]) throw new Fout(404, 'Niet gevonden.');
+    c.header('Content-Type', rows[0].soort);
+    // Een foto verandert nooit (een nieuwe foto krijgt een nieuw adres), dus het
+    // toestel mag hem bewaren. "private": alleen het toestel zelf, geen tussenstations.
+    c.header('Cache-Control', 'private, max-age=31536000, immutable');
+    return c.body(rows[0].gegevens);
+  });
+
+  app.delete('/api/afbeeldingen/:id', metSessie, async (c) => {
+    const db = c.get('db');
+    await eisBeheerVan(db, 'afbeeldingen', c.req.param('id'));
+    await db.query('delete from afbeeldingen where id = $1', [c.req.param('id')]);
+    return c.json({ ok: true });
+  });
+
+  // Definitief verwijderen kan alleen bij een afgesloten reis.
+  app.delete('/api/reizen/:reisId', metSessie, async (c) => {
+    const db = c.get('db');
+    const reis = await haalReis(db, c.req.param('reisId'));
+    if (!reis.beheerder) throw new Fout(403, 'Alleen een beheerder kan een reis verwijderen.');
+    if (!reis.gearchiveerd) throw new Fout(409, 'Sluit de reis eerst af. Daarna kun je hem verwijderen.');
+    await db.query('delete from reizen where id = $1', [reis.id]);
+    return c.json({ ok: true });
   });
 
   app.all('/api/*', (c) => c.json({ fout: 'Niet gevonden.' }, 404));
